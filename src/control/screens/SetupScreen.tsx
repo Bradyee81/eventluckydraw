@@ -13,7 +13,10 @@ import {
   replaceParticipants,
   replacePrizes,
   updateParticipant,
+  updatePrize,
 } from "../../lib/db";
+import { ConfirmModal } from "../../components/ConfirmModal";
+import { PrizeFormModal } from "../../components/PrizeFormModal";
 import type { Participant, Prize } from "../../types";
 
 export function SetupScreen() {
@@ -175,8 +178,25 @@ export function SetupScreen() {
     refreshPrizes();
   };
 
-  const handleDeletePrize = async (id: number) => {
-    await deletePrize(id);
+  const [editingPrize, setEditingPrize] = useState<Prize | null>(null);
+  const [deletingPrize, setDeletingPrize] = useState<Prize | null>(null);
+
+  const saveEditPrize = async (patch: {
+    section: string;
+    name: string;
+    winner_count: number;
+    description: string;
+  }) => {
+    if (!editingPrize) return;
+    await updatePrize(editingPrize.id, patch);
+    setEditingPrize(null);
+    refreshPrizes();
+  };
+
+  const confirmDeletePrize = async () => {
+    if (!deletingPrize) return;
+    await deletePrize(deletingPrize.id);
+    setDeletingPrize(null);
     refreshPrizes();
   };
 
@@ -441,9 +461,15 @@ export function SetupScreen() {
                   <td className="px-3 py-1.5 font-semibold text-[#F5C518]">{p.name}</td>
                   <td className="px-3 py-1.5">{p.winner_count}</td>
                   <td className="px-3 py-1.5 text-white/60">{p.description}</td>
-                  <td className="px-3 py-1.5 text-right">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right">
                     <button
-                      onClick={() => handleDeletePrize(p.id)}
+                      onClick={() => setEditingPrize(p)}
+                      className="mr-2 text-[#F5C518] hover:underline"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setDeletingPrize(p)}
                       className="text-[#E27676] hover:underline"
                     >
                       Delete
@@ -454,6 +480,24 @@ export function SetupScreen() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {editingPrize && (
+        <PrizeFormModal
+          prize={editingPrize}
+          onSave={saveEditPrize}
+          onClose={() => setEditingPrize(null)}
+        />
+      )}
+
+      {deletingPrize && (
+        <ConfirmModal
+          title="Delete this prize?"
+          message={`"${deletingPrize.name}" under "${deletingPrize.section}" will be removed from the catalog. Past draw records aren't affected.`}
+          confirmLabel="Delete"
+          onConfirm={confirmDeletePrize}
+          onCancel={() => setDeletingPrize(null)}
+        />
       )}
     </div>
   );

@@ -5,6 +5,7 @@ import { usePresentToggle } from "../../lib/presentWindow";
 import { findParticipantByTicket, insertDrawRecord, listDrawRecords } from "../../lib/db";
 import { SectionControl } from "../../components/SectionControl";
 import { RecentDraws } from "../../components/RecentDraws";
+import { Toggle } from "../../components/Toggle";
 import { formatSectionLabel } from "../../lib/format";
 import type { DrawRecord, Participant } from "../../types";
 
@@ -35,6 +36,7 @@ export function DrawScreen() {
   const [recentRecords, setRecentRecords] = useState<DrawRecord[]>([]);
   const [sectionSequence, setSectionSequence] = useState<number | null>(null);
   const [resultShown, setResultShown] = useState(false);
+  const [skipValidation, setSkipValidation] = useState(false);
 
   const refreshRecent = useCallback(() => {
     listDrawRecords().then((records) => setRecentRecords(records.slice(0, 8)));
@@ -69,14 +71,14 @@ export function DrawScreen() {
   }, []);
 
   useEffect(() => {
-    if (isComplete && hasList && !confirmedNumber) {
+    if (isComplete && hasList && !skipValidation && !confirmedNumber) {
       validate(digits);
-    } else if (!isComplete) {
+    } else if (!isComplete || skipValidation) {
       setMatch(null);
       setNotFound(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isComplete, digits, hasList]);
+  }, [isComplete, digits, hasList, skipValidation]);
 
   const enterDigit = useCallback(
     (d: number) => {
@@ -155,7 +157,7 @@ export function DrawScreen() {
 
   const confirm = useCallback(async () => {
     if (!isComplete || confirmedNumber) return;
-    if (hasList && notFound) return;
+    if (hasList && !skipValidation && notFound) return;
     const number = digits.join("");
     const sequence = await insertDrawRecord({
       number,
@@ -172,7 +174,18 @@ export function DrawScreen() {
     emitEvent("draw:confirmed", { number, participantName: match?.name ?? null });
     setSaveMsg("Draw logged.");
     refreshRecent();
-  }, [isComplete, confirmedNumber, hasList, notFound, digits, match, note, currentSection, refreshRecent]);
+  }, [
+    isComplete,
+    confirmedNumber,
+    hasList,
+    skipValidation,
+    notFound,
+    digits,
+    match,
+    note,
+    currentSection,
+    refreshRecent,
+  ]);
 
   const toggleShowResult = () => {
     if (resultShown) {
@@ -220,7 +233,12 @@ export function DrawScreen() {
               Click a slot to target it, then type the announced number.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
+            <Toggle
+              checked={skipValidation}
+              onChange={setSkipValidation}
+              label="Fail-safe (skip list check)"
+            />
             <SectionControl
               section={currentSection}
               onSave={(name) => updateConfig({ current_section: name })}
@@ -280,7 +298,7 @@ export function DrawScreen() {
           </button>
         </div>
 
-        {hasList && isComplete && !confirmedNumber && (
+        {hasList && !skipValidation && isComplete && !confirmedNumber && (
           <div className="mb-4">
             {match && (
               <p className="text-[#7CD992]">
@@ -297,6 +315,12 @@ export function DrawScreen() {
         {!hasList && isComplete && !confirmedNumber && (
           <p className="mb-4 text-white/50">
             No participant list loaded — this number will be logged without a matched name.
+          </p>
+        )}
+        {hasList && skipValidation && isComplete && !confirmedNumber && (
+          <p className="mb-4 text-[#F5C518]">
+            Fail-safe mode on — skipping the participant list check. This number will be logged
+            without a matched name.
           </p>
         )}
 

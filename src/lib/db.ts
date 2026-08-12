@@ -189,6 +189,17 @@ export async function addPrize(prize: {
   );
 }
 
+export async function updatePrize(
+  id: number,
+  patch: { section: string; name: string; winner_count: number; description: string }
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    "UPDATE prizes SET section = $1, name = $2, winner_count = $3, description = $4 WHERE id = $5",
+    [patch.section, patch.name, patch.winner_count, patch.description, id]
+  );
+}
+
 export async function deletePrize(id: number): Promise<void> {
   const db = await getDb();
   await db.execute("DELETE FROM prizes WHERE id = $1", [id]);
