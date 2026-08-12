@@ -17,6 +17,7 @@ import { SectionControl } from "../../components/SectionControl";
 import { RecentDraws } from "../../components/RecentDraws";
 import type { DrawRecord, Participant, PlannedRound, Prize } from "../../types";
 
+const dropdownStyle = { backgroundColor: "#10141F", color: "#E6E9EF" };
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function ticketToDigits(ticket: string, slotCount: number): number[] | null {
@@ -35,8 +36,19 @@ function pickRandom<T>(pool: T[], count: number): T[] {
   return arr.slice(0, n);
 }
 
+/** Every prize under a section, expanded into one entry per winner slot,
+ *  e.g. [iPhone x1, Voucher x2] -> ["iPhone", "Voucher", "Voucher"]. */
+function buildPrizePlan(sectionPrizes: Prize[]): string[] {
+  const plan: string[] = [];
+  for (const prize of sectionPrizes) {
+    for (let i = 0; i < prize.winner_count; i++) plan.push(prize.name);
+  }
+  return plan;
+}
+
 interface WinnerEntry {
   participant: Participant;
+  prizeName: string;
   section_sequence: number | null;
   revealed: boolean;
 }
@@ -46,7 +58,6 @@ export function AutoDrawScreen() {
   const currentSection = config?.current_section ?? "";
   const { presenting, toggle: togglePresent } = usePresentToggle();
 
-  const [winnerCount, setWinnerCount] = useState(1);
   const [excludeRepeats, setExcludeRepeats] = useState(true);
   const [isDrawing, setIsDrawing] = useState(false);
   const [winners, setWinners] = useState<WinnerEntry[]>([]);
@@ -56,14 +67,11 @@ export function AutoDrawScreen() {
   const [recentRecords, setRecentRecords] = useState<DrawRecord[]>([]);
 
   const [plannedRounds, setPlannedRounds] = useState<PlannedRound[]>([]);
-  const [newRoundSection, setNewRoundSection] = useState("");
-  const [newRoundCount, setNewRoundCount] = useState(1);
-  const [newRoundExclude, setNewRoundExclude] = useState(true);
-  const [newRoundPrize, setNewRoundPrize] = useState("");
-
   const [prizes, setPrizes] = useState<Prize[]>([]);
-  const [activePrizeName, setActivePrizeName] = useState("");
   const prizeSections = Array.from(new Set(prizes.map((p) => p.section))).filter(Boolean);
+
+  const sectionPrizes = prizes.filter((p) => p.section === currentSection);
+  const prizePlan = buildPrizePlan(sectionPrizes);
 
   const refreshRecent = useCallback(() => {
     listDrawRecords().then((records) => setRecentRecords(records.slice(0, 8)));
@@ -83,25 +91,14 @@ export function AutoDrawScreen() {
     refreshPrizes();
   }, [refreshRecent, refreshPlannedRounds, refreshPrizes]);
 
-  const handleSelectRoundSection = (section: string) => {
-    setNewRoundSection(section);
-    const prize = prizes.find((p) => p.section === section);
-    setNewRoundPrize(prize?.name ?? "");
-    if (prize) setNewRoundCount(prize.winner_count);
-  };
-
-  const handleAddPlannedRound = async () => {
-    if (!newRoundSection.trim()) return;
+  const handleSaveAsPlannedRound = async () => {
+    if (!currentSection) return;
     await addPlannedRound({
-      section: newRoundSection.trim(),
-      winner_count: Math.max(1, newRoundCount),
-      exclude_repeat_winners: newRoundExclude,
-      prize_name: newRoundPrize,
+      section: currentSection,
+      winner_count: prizePlan.length,
+      exclude_repeat_winners: excludeRepeats,
+      prize_name: sectionPrizes.map((p) => p.name).join(", "),
     });
-    setNewRoundSection("");
-    setNewRoundCount(1);
-    setNewRoundExclude(true);
-    setNewRoundPrize("");
     refreshPlannedRounds();
   };
 
@@ -111,9 +108,7 @@ export function AutoDrawScreen() {
   };
 
   const loadPlannedRound = (round: PlannedRound) => {
-    setWinnerCount(round.winner_count);
     setExcludeRepeats(!!round.exclude_repeat_winners);
-    setActivePrizeName(round.prize_name);
     updateConfig({ current_section: round.section });
   };
 
@@ -127,6 +122,10 @@ export function AutoDrawScreen() {
       setError("No participant list loaded. Import one on the Setup screen first.");
       return;
     }
+    if (prizePlan.length === 0) {
+      setError("No prizes found for this section. Add some on the Setup screen first.");
+      return;
+    }
 
     let pool = participants;
     if (excludeRepeats) {
@@ -138,10 +137,10 @@ export function AutoDrawScreen() {
       return;
     }
 
-    const picks = pickRandom(pool, winnerCount);
-    if (picks.length < winnerCount) {
+    const picks = pickRandom(pool, prizePlan.length);
+    if (picks.length < prizePlan.length) {
       setNotice(
-        `Only ${picks.length} eligible participant${picks.length === 1 ? "" : "s"} available — drawing ${picks.length} instead of ${winnerCount}.`
+        `Only ${picks.length} eligible participant${picks.length === 1 ? "" : "s"} available — drawing ${picks.length} instead of ${prizePlan.length}.`
       );
     }
 
@@ -155,7 +154,14 @@ export function AutoDrawScreen() {
     }
 
     setIsDrawing(true);
-    setWinners(picks.map((participant) => ({ participant, section_sequence: null, revealed: false })));
+    setWinners(
+      picks.map((participant, i) => ({
+        participant,
+        prizeName: prizePlan[i],
+        section_sequence: null,
+        revealed: false,
+      }))
+    );
 
     for (let i = 0; i < picks.length; i++) {
       const p = picks[i];
@@ -174,7 +180,7 @@ export function AutoDrawScreen() {
         section: currentSection,
         mode: "auto",
         exclude_repeat_winners: excludeRepeats,
-        prize_name: activePrizeName,
+        prize_name: prizePlan[i],
       });
 
       setWinners((prev) => {
@@ -187,16 +193,9 @@ export function AutoDrawScreen() {
 
     emitEvent("draw:reset", {});
     setIsDrawing(false);
-  }, [
-    config,
-    isDrawing,
-    participants,
-    excludeRepeats,
-    winnerCount,
-    currentSection,
-    activePrizeName,
-    refreshRecent,
-  ]);
+    // prizePlan is derived fresh each render from prizes/currentSection, safe to omit
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, isDrawing, participants, excludeRepeats, currentSection, refreshRecent]);
 
   const toggleShowResults = () => {
     if (resultShown) {
@@ -207,8 +206,12 @@ export function AutoDrawScreen() {
     const revealed = winners.filter((w) => w.revealed);
     if (revealed.length === 0) return;
     emitEvent("draw:show-result", {
-      title: activePrizeName || currentSection || "Winners",
-      entries: revealed.map((w) => ({ number: w.participant.ticket_number, name: w.participant.name })),
+      title: currentSection || "Winners",
+      entries: revealed.map((w) => ({
+        number: w.participant.ticket_number,
+        name: w.participant.name,
+        prize: w.prizeName,
+      })),
     });
     setResultShown(true);
   };
@@ -219,7 +222,7 @@ export function AutoDrawScreen() {
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold">Auto Draw</h1>
-            <p className="text-white/60">Randomly draw one or more winners from the participant pool.</p>
+            <p className="text-white/60">Randomly draw winners for every prize in a section.</p>
           </div>
           <div className="flex items-center gap-2">
             <SectionControl
@@ -239,160 +242,125 @@ export function AutoDrawScreen() {
 
         <section className="mb-6 rounded-md border border-white/10 bg-white/[0.02] p-4">
           <h2 className="mb-3 text-sm font-semibold text-white/60">
-            Planned rounds{" "}
-            <span className="text-white/30">
-              (set up before the event, load when ready — manage prizes on Setup)
-            </span>
+            Draw a round <span className="text-white/30">(prizes managed on Setup)</span>
           </h2>
 
-          {plannedRounds.length > 0 && (
-            <ul className="mb-4 space-y-2">
-              {plannedRounds.map((round) => (
-                <li
-                  key={round.id}
-                  className="flex items-center justify-between rounded-md border border-white/10 bg-white/[0.02] px-3 py-2"
-                >
-                  <button
-                    onClick={() => loadPlannedRound(round)}
-                    className="flex flex-1 items-center gap-3 text-left hover:text-[#F5C518]"
-                  >
-                    <span className="font-semibold">{round.section}</span>
-                    {round.prize_name && (
-                      <span className="text-xs text-[#F5C518]">{round.prize_name}</span>
-                    )}
-                    <span className="text-xs text-white/50">{round.winner_count} winner{round.winner_count === 1 ? "" : "s"}</span>
-                    <span className="text-xs text-white/50">
-                      {round.exclude_repeat_winners ? "exclude repeats" : "repeats allowed"}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => handleDeletePlannedRound(round.id)}
-                    className="ml-3 rounded-md border border-[#E27676]/30 px-2 py-1 text-xs text-[#E27676] hover:bg-[#E27676]/10"
-                  >
-                    Delete
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="mb-4 flex flex-wrap items-end gap-3">
             <div>
               <label className="mb-1 block text-xs text-white/60">Section</label>
               {prizeSections.length > 0 ? (
                 <select
-                  value={newRoundSection}
-                  onChange={(e) => handleSelectRoundSection(e.target.value)}
+                  value={currentSection}
+                  onChange={(e) => updateConfig({ current_section: e.target.value })}
+                  style={dropdownStyle}
                   className="w-44 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-[#F5C518]"
                 >
-                  <option value="">Select a section…</option>
+                  <option value="" style={dropdownStyle}>
+                    Select a section…
+                  </option>
                   {prizeSections.map((section) => (
-                    <option key={section} value={section}>
+                    <option key={section} value={section} style={dropdownStyle}>
                       {section}
                     </option>
                   ))}
                 </select>
               ) : (
-                <input
-                  value={newRoundSection}
-                  onChange={(e) => setNewRoundSection(e.target.value)}
-                  placeholder="e.g. Grand Prize"
-                  className="w-40 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-[#F5C518]"
-                />
-              )}
-              {prizeSections.length === 0 && (
-                <p className="mt-1 text-[10px] text-white/30">
-                  No prizes yet — add some on Setup to pick from a list here.
+                <p className="text-sm text-white/30">
+                  No prizes yet — add some on Setup to pick a section here.
                 </p>
               )}
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-white/60">Prize (auto-filled)</label>
-              <div className="flex h-[38px] w-40 items-center rounded-md border border-white/10 bg-white/[0.03] px-3 text-sm text-white/70">
-                {newRoundPrize || "—"}
-              </div>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-white/60">Winners</label>
-              <input
-                type="number"
-                min={1}
-                value={newRoundCount}
-                onChange={(e) => setNewRoundCount(Math.max(1, Number(e.target.value) || 1))}
-                className="w-20 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-[#F5C518]"
-              />
             </div>
             <label className="flex items-center gap-2 pb-2 text-sm text-white/80">
               <input
                 type="checkbox"
-                checked={newRoundExclude}
-                onChange={(e) => setNewRoundExclude(e.target.checked)}
+                checked={excludeRepeats}
+                disabled={isDrawing}
+                onChange={(e) => setExcludeRepeats(e.target.checked)}
                 className="h-4 w-4"
               />
-              Exclude repeats
+              Exclude previous winners
             </label>
             <button
-              onClick={handleAddPlannedRound}
-              disabled={!newRoundSection.trim()}
-              className="rounded-md bg-[#F5C518] px-4 py-2 text-sm font-semibold text-[#10141F] disabled:opacity-40"
+              onClick={runRound}
+              disabled={isDrawing || !currentSection}
+              className="rounded-md bg-[#F5C518] px-5 py-2 font-semibold text-[#10141F] disabled:opacity-50"
             >
-              + Add Round
+              {isDrawing ? "Drawing…" : "Draw Round"}
+            </button>
+            <button
+              onClick={handleSaveAsPlannedRound}
+              disabled={!currentSection}
+              className="rounded-md border border-white/15 px-3 py-2 text-sm text-white/70 hover:bg-white/5 disabled:opacity-40"
+            >
+              + Save as Planned Round
             </button>
           </div>
-        </section>
 
-        <div className="mb-6 flex flex-wrap items-end gap-6 rounded-md border border-white/10 bg-white/[0.02] p-4">
-          <div>
-            <label className="mb-1 block text-xs text-white/60">Prize</label>
-            <div className="flex h-[38px] items-center gap-2">
-              {activePrizeName ? (
+          {currentSection && (
+            <div className="text-sm">
+              {sectionPrizes.length > 0 ? (
                 <>
-                  <span className="rounded-md border border-[#F5C518]/40 bg-[#F5C518]/10 px-3 py-2 text-sm font-semibold text-[#F5C518]">
-                    {activePrizeName}
-                  </span>
-                  <button
-                    onClick={() => setActivePrizeName("")}
-                    disabled={isDrawing}
-                    className="text-xs text-white/40 hover:text-white/70 disabled:opacity-40"
-                  >
-                    Clear
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    {sectionPrizes.map((p) => (
+                      <span
+                        key={p.id}
+                        className="rounded-full border border-[#F5C518]/30 bg-[#F5C518]/10 px-3 py-1 text-xs text-[#F5C518]"
+                      >
+                        {p.name} × {p.winner_count}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-white/40">
+                    {prizePlan.length} total winner{prizePlan.length === 1 ? "" : "s"} for "
+                    {currentSection}"
+                  </p>
                 </>
               ) : (
-                <span className="text-sm text-white/30">None — load a planned round</span>
+                <p className="text-xs text-[#E27676]">No prizes found for this section.</p>
               )}
             </div>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-white/60">Winner count</label>
-            <input
-              type="number"
-              min={1}
-              value={winnerCount}
-              disabled={isDrawing}
-              onChange={(e) => setWinnerCount(Math.max(1, Number(e.target.value) || 1))}
-              className="w-24 rounded-md border border-white/15 bg-white/5 px-3 py-2 outline-none focus:border-[#F5C518] disabled:opacity-50"
-            />
-          </div>
-          <label className="flex items-center gap-2 pb-2 text-sm text-white/80">
-            <input
-              type="checkbox"
-              checked={excludeRepeats}
-              disabled={isDrawing}
-              onChange={(e) => setExcludeRepeats(e.target.checked)}
-              className="h-4 w-4"
-            />
-            Exclude previous winners
-          </label>
-          <button
-            onClick={runRound}
-            disabled={isDrawing}
-            className="rounded-md bg-[#F5C518] px-5 py-2 font-semibold text-[#10141F] disabled:opacity-50"
-          >
-            {isDrawing ? "Drawing…" : "Draw Round"}
-          </button>
-          <span className="pb-2 text-xs text-white/40">{participants.length} participants loaded</span>
-        </div>
+          )}
+        </section>
+
+        {plannedRounds.length > 0 && (
+          <section className="mb-6 rounded-md border border-white/10 bg-white/[0.02] p-4">
+            <h2 className="mb-3 text-sm font-semibold text-white/60">
+              Planned rounds <span className="text-white/30">(click to load)</span>
+            </h2>
+            <ul className="space-y-2">
+              {plannedRounds.map((round) => {
+                const roundPrizes = prizes.filter((p) => p.section === round.section);
+                const total = buildPrizePlan(roundPrizes).length;
+                return (
+                  <li
+                    key={round.id}
+                    className="flex items-center justify-between rounded-md border border-white/10 bg-white/[0.02] px-3 py-2"
+                  >
+                    <button
+                      onClick={() => loadPlannedRound(round)}
+                      className="flex flex-1 items-center gap-3 text-left hover:text-[#F5C518]"
+                    >
+                      <span className="font-semibold">{round.section}</span>
+                      <span className="text-xs text-white/50">
+                        {roundPrizes.length} prize{roundPrizes.length === 1 ? "" : "s"}, {total} winner
+                        {total === 1 ? "" : "s"}
+                      </span>
+                      <span className="text-xs text-white/50">
+                        {round.exclude_repeat_winners ? "exclude repeats" : "repeats allowed"}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => handleDeletePlannedRound(round.id)}
+                      className="ml-3 rounded-md border border-[#E27676]/30 px-2 py-1 text-xs text-[#E27676] hover:bg-[#E27676]/10"
+                    >
+                      Delete
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
         {error && <p className="mb-4 text-sm text-[#E27676]">{error}</p>}
         {notice && <p className="mb-4 text-sm text-[#F5C518]">{notice}</p>}
@@ -425,9 +393,12 @@ export function AutoDrawScreen() {
                       : "border-white/10 bg-white/[0.02] text-white/30"
                   }`}
                 >
-                  <span className="font-semibold">
-                    {w.revealed ? w.participant.name : "Rolling…"}
-                  </span>
+                  <div>
+                    <div className="font-semibold">
+                      {w.revealed ? w.participant.name : "Rolling…"}
+                    </div>
+                    <div className="text-xs text-[#F5C518]/80">{w.prizeName}</div>
+                  </div>
                   <span className="flex items-center gap-3">
                     {w.revealed && w.section_sequence !== null && (
                       <span className="text-xs text-white/40">

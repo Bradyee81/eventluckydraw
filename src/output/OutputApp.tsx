@@ -122,7 +122,10 @@ export function OutputApp() {
                   key={i}
                   className="flex items-center justify-between gap-6 rounded-lg bg-white/5 px-6 py-3"
                 >
-                  <span className="text-2xl font-bold text-white">{entry.name ?? "—"}</span>
+                  <div className="text-left">
+                    <div className="text-2xl font-bold text-white">{entry.name ?? "—"}</div>
+                    {entry.prize && <div className="text-sm text-[#F5C518]/80">{entry.prize}</div>}
+                  </div>
                   <span className="font-mono text-2xl tracking-widest text-[#F5C518]">
                     {entry.number}
                   </span>

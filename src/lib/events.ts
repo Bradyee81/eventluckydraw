@@ -18,6 +18,7 @@ export interface DrawConfirmedPayload {
 export interface ResultEntry {
   number: string;
   name: string | null;
+  prize?: string;
 }
 
 export interface ShowResultPayload {

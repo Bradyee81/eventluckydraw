@@ -57,6 +57,31 @@ export async function findParticipantByTicket(ticketNumber: string): Promise<Par
   return rows[0] ?? null;
 }
 
+export async function addParticipant(participant: { ticket_number: string; name: string }): Promise<void> {
+  const db = await getDb();
+  await db.execute("INSERT INTO participants (ticket_number, name) VALUES ($1, $2)", [
+    participant.ticket_number,
+    participant.name,
+  ]);
+}
+
+export async function updateParticipant(
+  id: number,
+  patch: { ticket_number: string; name: string }
+): Promise<void> {
+  const db = await getDb();
+  await db.execute("UPDATE participants SET ticket_number = $1, name = $2 WHERE id = $3", [
+    patch.ticket_number,
+    patch.name,
+    id,
+  ]);
+}
+
+export async function deleteParticipant(id: number): Promise<void> {
+  const db = await getDb();
+  await db.execute("DELETE FROM participants WHERE id = $1", [id]);
+}
+
 /** Inserts a draw record and returns its position within its section (1st, 2nd, ...). */
 export async function insertDrawRecord(record: {
   number: string;

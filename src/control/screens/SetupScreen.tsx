@@ -4,14 +4,17 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useAppData } from "../AppDataContext";
 import { parseParticipantFile, parsePrizeFile } from "../../lib/csv";
 import {
+  addParticipant,
   addPrize,
   clearParticipants,
+  deleteParticipant,
   deletePrize,
   listPrizes,
   replaceParticipants,
   replacePrizes,
+  updateParticipant,
 } from "../../lib/db";
-import type { Prize } from "../../types";
+import type { Participant, Prize } from "../../types";
 
 export function SetupScreen() {
   const { participants, refreshParticipants } = useAppData();
@@ -43,6 +46,55 @@ export function SetupScreen() {
     await clearParticipants();
     await refreshParticipants();
     setStatus("Participant list cleared. Manual Mode will accept any number, unvalidated.");
+  };
+
+  const [newTicket, setNewTicket] = useState("");
+  const [newName, setNewName] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editTicket, setEditTicket] = useState("");
+  const [editName, setEditName] = useState("");
+
+  const handleAddParticipant = async () => {
+    const ticket = newTicket.trim();
+    const name = newName.trim();
+    if (!ticket) return;
+    try {
+      await addParticipant({ ticket_number: ticket, name });
+      setNewTicket("");
+      setNewName("");
+      setStatus(null);
+      await refreshParticipants();
+    } catch {
+      setStatus(`Couldn't add — ticket number "${ticket}" is already in use.`);
+    }
+  };
+
+  const startEditParticipant = (p: Participant) => {
+    setEditingId(p.id);
+    setEditTicket(p.ticket_number);
+    setEditName(p.name);
+  };
+
+  const cancelEditParticipant = () => {
+    setEditingId(null);
+  };
+
+  const saveEditParticipant = async (id: number) => {
+    const ticket = editTicket.trim();
+    if (!ticket) return;
+    try {
+      await updateParticipant(id, { ticket_number: ticket, name: editName.trim() });
+      setEditingId(null);
+      setStatus(null);
+      await refreshParticipants();
+    } catch {
+      setStatus(`Couldn't save — ticket number "${ticket}" is already in use.`);
+    }
+  };
+
+  const handleDeleteParticipant = async (id: number) => {
+    await deleteParticipant(id);
+    await refreshParticipants();
   };
 
   const downloadTemplate = async () => {
@@ -183,22 +235,96 @@ export function SetupScreen() {
         )}
       </div>
 
+      <div className="mt-6 flex flex-wrap items-end gap-3 rounded-md border border-white/10 bg-white/[0.02] p-4">
+        <div>
+          <label className="mb-1 block text-xs text-white/60">Ticket number</label>
+          <input
+            value={newTicket}
+            onChange={(e) => setNewTicket(e.target.value)}
+            placeholder="e.g. 1003"
+            className="w-32 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-[#F5C518]"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-white/60">Name</label>
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="e.g. Alex Tan"
+            className="w-44 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-[#F5C518]"
+          />
+        </div>
+        <button
+          onClick={handleAddParticipant}
+          disabled={!newTicket.trim()}
+          className="rounded-md bg-[#F5C518] px-4 py-2 text-sm font-semibold text-[#10141F] disabled:opacity-40"
+        >
+          + Add Participant
+        </button>
+        <span className="pb-2 text-xs text-white/30">For last-minute additions after the CSV import.</span>
+      </div>
+
       {participants.length > 0 && (
-        <div className="mt-6 max-h-72 overflow-y-auto rounded-md border border-white/10">
+        <div className="mt-6 max-h-96 overflow-y-auto rounded-md border border-white/10">
           <table className="w-full text-left text-xs">
             <thead className="sticky top-0 bg-[#0E1320] text-white/50">
               <tr>
                 <th className="px-3 py-2">Ticket #</th>
                 <th className="px-3 py-2">Name</th>
+                <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
-              {participants.slice(0, 200).map((p) => (
-                <tr key={p.id} className="border-t border-white/5">
-                  <td className="px-3 py-1.5 font-mono">{p.ticket_number}</td>
-                  <td className="px-3 py-1.5">{p.name}</td>
-                </tr>
-              ))}
+              {participants.slice(0, 200).map((p) =>
+                editingId === p.id ? (
+                  <tr key={p.id} className="border-t border-white/5 bg-white/[0.03]">
+                    <td className="px-3 py-1.5">
+                      <input
+                        value={editTicket}
+                        onChange={(e) => setEditTicket(e.target.value)}
+                        className="w-24 rounded border border-white/15 bg-white/5 px-2 py-1 font-mono outline-none focus:border-[#F5C518]"
+                      />
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="w-full rounded border border-white/15 bg-white/5 px-2 py-1 outline-none focus:border-[#F5C518]"
+                      />
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right">
+                      <button
+                        onClick={() => saveEditParticipant(p.id)}
+                        className="mr-2 text-[#7CD992] hover:underline"
+                      >
+                        Save
+                      </button>
+                      <button onClick={cancelEditParticipant} className="text-white/50 hover:underline">
+                        Cancel
+                      </button>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={p.id} className="border-t border-white/5">
+                    <td className="px-3 py-1.5 font-mono">{p.ticket_number}</td>
+                    <td className="px-3 py-1.5">{p.name}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right">
+                      <button
+                        onClick={() => startEditParticipant(p)}
+                        className="mr-2 text-[#F5C518] hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteParticipant(p.id)}
+                        className="text-[#E27676] hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                )
+              )}
             </tbody>
           </table>
           {participants.length > 200 && (
