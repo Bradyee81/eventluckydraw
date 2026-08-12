@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="3000" viewBox="0 0 200 3000">
+  <rect x="0" y="0" width="200" height="3000" fill="#10141F"/>
+  <g font-family="'Segoe UI', Arial, sans-serif" font-weight="700" font-size="180" fill="#F5C518" text-anchor="middle">
+    <text x="100" y="150" dominant-baseline="central">0</text>
+    <text x="100" y="450" dominant-baseline="central">1</text>
+    <text x="100" y="750" dominant-baseline="central">2</text>
+    <text x="100" y="1050" dominant-baseline="central">3</text>
+    <text x="100" y="1350" dominant-baseline="central">4</text>
+    <text x="100" y="1650" dominant-baseline="central">5</text>
+    <text x="100" y="1950" dominant-baseline="central">6</text>
+    <text x="100" y="2250" dominant-baseline="central">7</text>
+    <text x="100" y="2550" dominant-baseline="central">8</text>
+    <text x="100" y="2850" dominant-baseline="central">9</text>
+  </g>
+  <g stroke="#2A3142" stroke-width="2">
+    <line x1="0" y1="300" x2="200" y2="300"/>
+    <line x1="0" y1="600" x2="200" y2="600"/>
+    <line x1="0" y1="900" x2="200" y2="900"/>
+    <line x1="0" y1="1200" x2="200" y2="1200"/>
+    <line x1="0" y1="1500" x2="200" y2="1500"/>
+    <line x1="0" y1="1800" x2="200" y2="1800"/>
+    <line x1="0" y1="2100" x2="200" y2="2100"/>
+    <line x1="0" y1="2400" x2="200" y2="2400"/>
+    <line x1="0" y1="2700" x2="200" y2="2700"/>
+  </g>
+</svg>

@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background-color: #0B0F17;
+  color: #E6E9EF;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: #F5C518;
+  color: #10141F;
+}
+
+@keyframes idle-spin {
+  0% {
+    background-position-y: 0;
+  }
+  100% {
+    background-position-y: calc(var(--idle-distance, 3000px) * -1);
+  }
+}
+
+.animate-idle-spin {
+  animation: idle-spin 0.9s linear infinite;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

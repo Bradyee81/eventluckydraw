@@ -1,0 +1,2 @@
+ALTER TABLE app_config ADD COLUMN current_section TEXT NOT NULL DEFAULT '';
+ALTER TABLE draw_records ADD COLUMN section TEXT NOT NULL DEFAULT '';
