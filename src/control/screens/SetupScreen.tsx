@@ -9,7 +9,7 @@ import {
   clearParticipants,
   deleteParticipant,
   deletePrize,
-  deleteSectionSetting,
+  getSectionUsage,
   listPrizes,
   replaceParticipants,
   replacePrizes,
@@ -64,6 +64,8 @@ export function SetupScreen() {
     sectionSettings,
     refreshSections,
     setSectionSlotCount,
+    renameDraw,
+    deleteDraw,
   } = useAppData();
   const [importSection, setImportSection] = useState("");
   const [newDrawName, setNewDrawName] = useState("");
@@ -75,9 +77,63 @@ export function SetupScreen() {
     setNewDrawName("");
   };
 
-  const handleRemoveDraw = async (name: string) => {
-    await deleteSectionSetting(name);
-    await refreshSections();
+  const [renamingDraw, setRenamingDraw] = useState<string | null>(null);
+  const [renameInput, setRenameInput] = useState("");
+  const [deletingDraw, setDeletingDraw] = useState<{ name: string; message: string } | null>(null);
+  const [drawError, setDrawError] = useState<string | null>(null);
+
+  const startRenameDraw = (name: string) => {
+    setDrawError(null);
+    setRenamingDraw(name);
+    setRenameInput(name);
+  };
+
+  const saveRenameDraw = async () => {
+    const oldName = renamingDraw;
+    const newName = renameInput.trim();
+    setRenamingDraw(null);
+    if (!oldName || !newName || newName === oldName) return;
+    await renameDraw(oldName, newName);
+    if (importSection === oldName) setImportSection(newName);
+    if (newSection === oldName) setNewSection(newName);
+    refreshPrizes();
+  };
+
+  const askDeleteDraw = async (name: string) => {
+    setDrawError(null);
+    const usage = await getSectionUsage(name);
+    if (usage.results > 0) {
+      setDrawError(
+        `"${name}" already has ${usage.results} draw result${usage.results === 1 ? "" : "s"}. Clear them on the Results screen before deleting it, or rename it instead.`
+      );
+      return;
+    }
+    const parts = [
+      usage.prizes && `${usage.prizes} prize${usage.prizes === 1 ? "" : "s"}`,
+      usage.participants && `${usage.participants} ticket${usage.participants === 1 ? "" : "s"} tagged to it`,
+      usage.plannedRounds && `${usage.plannedRounds} planned round${usage.plannedRounds === 1 ? "" : "s"}`,
+    ].filter(Boolean);
+    setDeletingDraw({
+      name,
+      message:
+        parts.length > 0
+          ? `This also deletes its ${parts.join(", ")}. This can't be undone.`
+          : "Nothing else uses this draw.",
+    });
+  };
+
+  const confirmDeleteDraw = async () => {
+    if (!deletingDraw) return;
+    const { name } = deletingDraw;
+    setDeletingDraw(null);
+    try {
+      await deleteDraw(name);
+      if (importSection === name) setImportSection("");
+      if (newSection === name) setNewSection("");
+      refreshPrizes();
+    } catch (err) {
+      setDrawError(String(err));
+    }
   };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -295,13 +351,26 @@ export function SetupScreen() {
             {knownSections.map((name) => {
               const setting = sectionSettings.find((s) => s.name === name);
               const tagged = participants.filter((p) => p.section === name).length;
-              const inUse = tagged > 0 || prizes.some((p) => p.section === name);
               return (
                 <li
                   key={name}
                   className="flex flex-wrap items-center gap-3 rounded-md border border-white/10 px-3 py-2"
                 >
-                  <span className="min-w-36 font-semibold">{name}</span>
+                  {renamingDraw === name ? (
+                    <input
+                      autoFocus
+                      value={renameInput}
+                      onChange={(e) => setRenameInput(e.target.value)}
+                      onBlur={saveRenameDraw}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveRenameDraw();
+                        if (e.key === "Escape") setRenamingDraw(null);
+                      }}
+                      className="w-44 rounded-md border border-[#F5C518] bg-white/5 px-2 py-1 text-sm font-semibold outline-none"
+                    />
+                  ) : (
+                    <span className="min-w-36 font-semibold">{name}</span>
+                  )}
                   <select
                     value={setting?.slot_count ?? ""}
                     onChange={(e) =>
@@ -322,14 +391,20 @@ export function SetupScreen() {
                   <span className="text-xs text-white/40">
                     {tagged} ticket{tagged === 1 ? "" : "s"} of its own
                   </span>
-                  {setting && !inUse && (
+                  <span className="ml-auto flex gap-3 text-xs">
                     <button
-                      onClick={() => handleRemoveDraw(name)}
-                      className="ml-auto text-xs text-[#E27676] hover:underline"
+                      onClick={() => startRenameDraw(name)}
+                      className="text-[#F5C518] hover:underline"
                     >
-                      Remove
+                      Rename
                     </button>
-                  )}
+                    <button
+                      onClick={() => askDeleteDraw(name)}
+                      className="text-[#E27676] hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </span>
                 </li>
               );
             })}
@@ -339,6 +414,7 @@ export function SetupScreen() {
             No draws yet. Add one below or import a prize list.
           </p>
         )}
+        {drawError && <p className="mb-3 text-xs text-[#E27676]">{drawError}</p>}
         <div className="flex items-center gap-2">
           <input
             value={newDrawName}
@@ -654,6 +730,16 @@ export function SetupScreen() {
           prize={editingPrize}
           onSave={saveEditPrize}
           onClose={() => setEditingPrize(null)}
+        />
+      )}
+
+      {deletingDraw && (
+        <ConfirmModal
+          title={`Delete "${deletingDraw.name}"?`}
+          message={deletingDraw.message}
+          confirmLabel="Delete draw"
+          onConfirm={confirmDeleteDraw}
+          onCancel={() => setDeletingDraw(null)}
         />
       )}
 

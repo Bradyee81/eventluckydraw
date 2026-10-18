@@ -105,10 +105,11 @@ export function AutoDrawScreen() {
     knownSections,
     sectionSettings,
     selectSection,
+    activateMode,
     refreshSections,
     buzzerConnected,
   } = useAppData();
-  const currentSection = config?.current_section ?? "";
+  const currentSection = config?.auto_section ?? "";
   const { presenting, toggle: togglePresent } = usePresentToggle();
 
   const [excludeRepeats, setExcludeRepeats] = useState(true);
@@ -172,6 +173,12 @@ export function AutoDrawScreen() {
     refreshSections();
   }, [refreshSections]);
 
+  // Switch the Output window to this screen's draw (its slot count) on open.
+  useEffect(() => {
+    activateMode("auto");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     refreshRecent();
     refreshPlannedRounds();
@@ -196,7 +203,7 @@ export function AutoDrawScreen() {
 
   const loadPlannedRound = (round: PlannedRound) => {
     setExcludeRepeats(!!round.exclude_repeat_winners);
-    selectSection(round.section);
+    selectSection(round.section, "auto");
     setActiveRoundId(round.id);
   };
 
@@ -251,7 +258,7 @@ export function AutoDrawScreen() {
         setNotice(null);
         if (resultShown) emitEvent("draw:hide-result", {});
         setResultShown(null);
-        await selectSection(section);
+        await selectSection(section, "auto");
         setExcludeRepeats(exclude);
         // Read straight from settings: `config` in this closure predates selectSection.
         const slots =
@@ -354,6 +361,27 @@ export function AutoDrawScreen() {
     };
   }, [beginOrAdvance, currentSection, excludeRepeats]);
 
+  // Enter does the same as the Draw/Reveal button: first press draws, next reveals.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || e.repeat) return;
+      const target = e.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      if (editingPrize || deletingPrize) return;
+      // Stop Enter also "clicking" whichever button has focus.
+      e.preventDefault();
+      beginOrAdvance(currentSection, excludeRepeats);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [beginOrAdvance, currentSection, excludeRepeats, editingPrize, deletingPrize]);
+
   // Pulls from the DB rather than in-memory `winners`, so the emcee can
   // re-reveal any past section's winner list even after moving on to a
   // later round (winners only holds the most recently drawn round).
@@ -426,7 +454,7 @@ export function AutoDrawScreen() {
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold">Auto Draw</h1>
-            <p className="text-white/60">Randomly draw winners for every prize in a section.</p>
+            <p className="text-white/60">Randomly draw winners for every prize in a section. Press Enter to draw, then Enter again to reveal.</p>
           </div>
           <div className="flex items-center gap-3">
             <span
@@ -445,7 +473,7 @@ export function AutoDrawScreen() {
             <SectionControl
               section={currentSection}
               suggestions={knownSections}
-              onSave={selectSection}
+              onSave={(name) => selectSection(name, "auto")}
             />
             <button
               onClick={togglePresent}
@@ -470,7 +498,7 @@ export function AutoDrawScreen() {
                 <select
                   value={currentSection}
                   onChange={(e) => {
-                    selectSection(e.target.value);
+                    selectSection(e.target.value, "auto");
                     setActiveRoundId(null);
                   }}
                   disabled={isDrawing}

@@ -262,10 +262,6 @@ export async function setSectionSlotCount(name: string, slotCount: number | null
   );
 }
 
-export async function deleteSectionSetting(name: string): Promise<void> {
-  const db = await getDb();
-  await db.execute("DELETE FROM sections WHERE name = $1", [name]);
-}
 
 /**
  * Factory reset: clears everything from the last event (results, planned
@@ -282,4 +278,58 @@ export async function resetAllData(): Promise<void> {
   await db.execute("DELETE FROM sections");
   await db.execute("DELETE FROM app_config");
   await db.execute("INSERT INTO app_config (id) VALUES (1)");
+}
+
+/** What a draw (section) is used by, for the delete confirmation. */
+export async function getSectionUsage(
+  name: string
+): Promise<{ prizes: number; participants: number; plannedRounds: number; results: number }> {
+  const db = await getDb();
+  const count = async (table: string) =>
+    (await db.select<{ c: number }[]>(`SELECT COUNT(*) as c FROM ${table} WHERE section = $1`, [name]))[0]
+      ?.c ?? 0;
+  return {
+    prizes: await count("prizes"),
+    participants: await count("participants"),
+    plannedRounds: await count("planned_rounds"),
+    results: await count("draw_records"),
+  };
+}
+
+/**
+ * Renames a draw everywhere it's used: prizes, tagged tickets, planned
+ * rounds, past results, its slot count and the Manual/Auto selections.
+ * Renaming onto an existing draw merges the two.
+ */
+export async function renameSection(oldName: string, newName: string): Promise<void> {
+  const db = await getDb();
+  for (const table of ["prizes", "participants", "planned_rounds", "draw_records"]) {
+    await db.execute(`UPDATE ${table} SET section = $1 WHERE section = $2`, [newName, oldName]);
+  }
+  // Keep the target's own slot count if it already has one.
+  await db.execute(
+    "INSERT OR IGNORE INTO sections (name, slot_count) SELECT $1, slot_count FROM sections WHERE name = $2",
+    [newName, oldName]
+  );
+  await db.execute("DELETE FROM sections WHERE name = $1", [oldName]);
+  await db.execute("UPDATE app_config SET current_section = $1 WHERE current_section = $2", [newName, oldName]);
+  await db.execute("UPDATE app_config SET auto_section = $1 WHERE auto_section = $2", [newName, oldName]);
+}
+
+/**
+ * Deletes a draw with its prizes, planned rounds and tagged tickets. Refuses
+ * while it has results, so a winner list can't be lost by accident.
+ */
+export async function deleteSection(name: string): Promise<void> {
+  const db = await getDb();
+  const { results } = await getSectionUsage(name);
+  if (results > 0) {
+    throw new Error(`"${name}" has ${results} draw result(s). Clear them on the Results screen first.`);
+  }
+  for (const table of ["prizes", "planned_rounds", "participants", "sections"]) {
+    const column = table === "sections" ? "name" : "section";
+    await db.execute(`DELETE FROM ${table} WHERE ${column} = $1`, [name]);
+  }
+  await db.execute("UPDATE app_config SET current_section = '' WHERE current_section = $1", [name]);
+  await db.execute("UPDATE app_config SET auto_section = '' WHERE auto_section = $1", [name]);
 }

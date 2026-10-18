@@ -73,7 +73,10 @@ export interface AppConfig {
   title_align: TextAlign;
   footer_align: TextAlign;
   digit_strip_path: string;
+  // Section selected on Manual Draw.
   current_section: string;
+  // Section selected on Auto Draw (kept separately so the two screens don't follow each other).
+  auto_section: string;
 }
 
 export interface ChromaPreset {

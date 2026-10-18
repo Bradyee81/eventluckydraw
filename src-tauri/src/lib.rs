@@ -56,6 +56,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/0008_section_slots_and_participant_draws.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 9,
+            description: "add separate auto draw section",
+            sql: include_str!("../migrations/0009_auto_draw_section.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

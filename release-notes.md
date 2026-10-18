@@ -1,9 +1,7 @@
 **What's new**
 
-- **Fixed: slots 7 to 12 not rolling.** With more than 6 slots, the extra reels now roll like the rest.
-- **Livelier reels.** Each reel spins at its own speed, so they no longer move in lockstep.
-- **Manual Draw** (renamed from "Draw") starts the reels rolling as soon as you open it, and again after each **Start New Draw**.
-- **Fail-safe stays on.** Once switched on, the Manual Draw fail-safe stays on across tabs and restarts until you turn it off.
-- **Factory reset.** Config → Factory reset clears everything from the last event, including participants, prizes, results and settings, ready for a new one. It asks for the admin password.
+- **Rename or delete a draw.** Setup → Draws now has Rename and Delete next to each draw. Renaming fixes a typo everywhere: prizes, tickets, planned rounds and results. Deleting removes the draw with its prizes and tagged tickets, and is blocked if the draw already has results.
+- **Manual Draw and Auto Draw keep their own draw.** Choosing a section on one screen no longer changes the other, and each screen switches the Output window to its own slot count when you open it.
+- **Enter to draw on Auto Draw.** Press Enter to draw, then Enter again to reveal, the same as the Draw button.
 
 **New install:** download the file ending in `_x64-setup.exe` below and run it. Already have Lucky Draw 0.2.0 or later? Open it and press **Update now**.

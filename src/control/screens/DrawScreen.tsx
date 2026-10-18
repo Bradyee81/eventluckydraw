@@ -30,7 +30,8 @@ function loadSkipValidation(): boolean {
 }
 
 export function DrawScreen() {
-  const { config, participants, knownSections, selectSection, buzzerConnected } = useAppData();
+  const { config, participants, knownSections, selectSection, activateMode, buzzerConnected } =
+    useAppData();
   const slotCount = config?.slot_count ?? 6;
   const currentSection = config?.current_section ?? "";
   // Only this draw's tickets (plus untagged ones) count for validation.
@@ -76,10 +77,13 @@ export function DrawScreen() {
     refreshRecent();
   }, [refreshRecent]);
 
-  // Opening Manual Draw gets the reels spinning straight away, ready for the
-  // first announced number.
+  // Opening Manual Draw switches the Output window to this screen's draw (its
+  // slot count) and gets the reels spinning, ready for the first number.
   useEffect(() => {
-    emitEvent("draw:reset", {}).then(() => emitEvent("draw:roll", {}));
+    activateMode("manual")
+      .then(() => emitEvent("draw:reset", {}))
+      .then(() => emitEvent("draw:roll", {}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fail-safe stays on/off for the whole event (remembered across tabs and
@@ -302,7 +306,7 @@ export function DrawScreen() {
             <SectionControl
               section={currentSection}
               suggestions={knownSections}
-              onSave={selectSection}
+              onSave={(name) => selectSection(name, "manual")}
             />
             <button
               onClick={togglePresent}

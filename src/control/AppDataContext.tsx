@@ -1,5 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  deleteSection,
+  renameSection,
   resetAllData,
   getConfig,
   listKnownSections,
@@ -9,7 +11,13 @@ import {
   updateConfig as dbUpdateConfig,
 } from "../lib/db";
 import { emitEvent, onEvent } from "../lib/events";
-import type { AppConfig, Participant, SectionSetting } from "../types";
+import type { AppConfig, DrawMode, Participant, SectionSetting } from "../types";
+
+/** The config column holding each draw screen's selected section. */
+const SECTION_KEY: Record<DrawMode, "current_section" | "auto_section"> = {
+  manual: "current_section",
+  auto: "auto_section",
+};
 
 interface AppDataValue {
   config: AppConfig | null;
@@ -22,8 +30,12 @@ interface AppDataValue {
   refreshParticipants: () => Promise<void>;
   refreshSections: () => Promise<void>;
   updateConfig: (patch: Partial<Omit<AppConfig, "id">>) => Promise<void>;
-  /** Switches the current section, and the slot count with it if the section has its own. */
-  selectSection: (name: string) => Promise<void>;
+  /** Switches one draw screen's section, and the slot count with it if the section has its own. */
+  selectSection: (name: string, mode: DrawMode) => Promise<void>;
+  /** Called when a draw screen opens: applies that screen's section slot count to the Output window. */
+  activateMode: (mode: DrawMode) => Promise<void>;
+  renameDraw: (oldName: string, newName: string) => Promise<void>;
+  deleteDraw: (name: string) => Promise<void>;
   setSectionSlotCount: (name: string, slotCount: number | null) => Promise<void>;
   /** Wipes all event data and settings, and clears the Output window. */
   factoryReset: () => Promise<void>;
@@ -75,23 +87,69 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     await emitEvent("config:updated", next);
   }, []);
 
+  // Which draw screen is in use, so a slot-count change applies to the right section.
+  const activeModeRef = useRef<DrawMode>("manual");
+
+  const slotsFor = useCallback(
+    (name: string) => sectionSettings.find((s) => s.name === name)?.slot_count ?? null,
+    [sectionSettings]
+  );
+
   const selectSection = useCallback(
-    async (name: string) => {
-      const slots = sectionSettings.find((s) => s.name === name)?.slot_count ?? null;
-      await updateConfig(slots === null ? { current_section: name } : { current_section: name, slot_count: slots });
+    async (name: string, mode: DrawMode) => {
+      activeModeRef.current = mode;
+      const slots = slotsFor(name);
+      const key = SECTION_KEY[mode];
+      await updateConfig(slots === null ? { [key]: name } : { [key]: name, slot_count: slots });
     },
-    [sectionSettings, updateConfig]
+    [slotsFor, updateConfig]
+  );
+
+  const activateMode = useCallback(
+    async (mode: DrawMode) => {
+      activeModeRef.current = mode;
+      const section = config?.[SECTION_KEY[mode]] ?? "";
+      const slots = section ? slotsFor(section) : null;
+      if (slots !== null && slots !== config?.slot_count) {
+        await updateConfig({ slot_count: slots });
+      }
+    },
+    [config, slotsFor, updateConfig]
   );
 
   const setSectionSlotCount = useCallback(
     async (name: string, slotCount: number | null) => {
       await dbSetSectionSlotCount(name, slotCount);
       await refreshSections();
-      if (slotCount !== null && config?.current_section === name) {
+      if (slotCount !== null && config?.[SECTION_KEY[activeModeRef.current]] === name) {
         await updateConfig({ slot_count: slotCount });
       }
     },
     [config, refreshSections, updateConfig]
+  );
+
+  const reloadConfig = useCallback(async () => {
+    const cfg = await getConfig();
+    setConfig(cfg);
+    await emitEvent("config:updated", cfg);
+  }, []);
+
+  const renameDraw = useCallback(
+    async (oldName: string, newName: string) => {
+      await renameSection(oldName, newName);
+      await reloadConfig();
+      await refreshParticipants();
+    },
+    [reloadConfig, refreshParticipants]
+  );
+
+  const deleteDraw = useCallback(
+    async (name: string) => {
+      await deleteSection(name);
+      await reloadConfig();
+      await refreshParticipants();
+    },
+    [reloadConfig, refreshParticipants]
   );
 
   const factoryReset = useCallback(
@@ -126,6 +184,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         refreshSections,
         updateConfig,
         selectSection,
+        activateMode,
+        renameDraw,
+        deleteDraw,
         setSectionSlotCount,
         factoryReset,
       }}
