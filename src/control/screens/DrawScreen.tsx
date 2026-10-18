@@ -19,6 +19,16 @@ function nextEmptyIndex(digits: (number | null)[], from: number): number {
 
 const BUZZ_FLASH_MS = 1500;
 
+const SKIP_VALIDATION_KEY = "manualDraw.skipValidation";
+
+function loadSkipValidation(): boolean {
+  try {
+    return localStorage.getItem(SKIP_VALIDATION_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function DrawScreen() {
   const { config, participants, knownSections, selectSection, buzzerConnected } = useAppData();
   const slotCount = config?.slot_count ?? 6;
@@ -39,7 +49,7 @@ export function DrawScreen() {
   const [recentRecords, setRecentRecords] = useState<DrawRecord[]>([]);
   const [sectionSequence, setSectionSequence] = useState<number | null>(null);
   const [resultShown, setResultShown] = useState(false);
-  const [skipValidation, setSkipValidation] = useState(false);
+  const [skipValidation, setSkipValidationState] = useState(loadSkipValidation);
   const [buzzed, setBuzzed] = useState(false);
   const buzzFlashTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -65,6 +75,23 @@ export function DrawScreen() {
   useEffect(() => {
     refreshRecent();
   }, [refreshRecent]);
+
+  // Opening Manual Draw gets the reels spinning straight away, ready for the
+  // first announced number.
+  useEffect(() => {
+    emitEvent("draw:reset", {}).then(() => emitEvent("draw:roll", {}));
+  }, []);
+
+  // Fail-safe stays on/off for the whole event (remembered across tabs and
+  // restarts) until someone switches it back.
+  const setSkipValidation = (value: boolean) => {
+    setSkipValidationState(value);
+    try {
+      localStorage.setItem(SKIP_VALIDATION_KEY, value ? "1" : "0");
+    } catch {
+      // Preference just won't persist — the switch still works.
+    }
+  };
 
   // Resize the entry array whenever slot_count changes and we're not mid-entry.
   useEffect(() => {
@@ -175,7 +202,8 @@ export function DrawScreen() {
     setSaveMsg(null);
     setSectionSequence(null);
     setResultShown(false);
-    emitEvent("draw:reset", {});
+    // Clear the last result, then start rolling for the next number.
+    emitEvent("draw:reset", {}).then(() => emitEvent("draw:roll", {}));
   }, [slotCount]);
 
   const confirm = useCallback(async () => {
@@ -251,7 +279,7 @@ export function DrawScreen() {
       <div className="min-w-0 flex-1">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold">Draw</h1>
+            <h1 className="text-xl font-bold">Manual Draw</h1>
             <p className="text-white/60">
               Click a slot to target it, then type the announced number.
             </p>

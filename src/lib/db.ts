@@ -266,3 +266,20 @@ export async function deleteSectionSetting(name: string): Promise<void> {
   const db = await getDb();
   await db.execute("DELETE FROM sections WHERE name = $1", [name]);
 }
+
+/**
+ * Factory reset: clears everything from the last event (results, planned
+ * rounds, prizes, participants, per-draw slot counts) and puts every display
+ * and config setting back to its default.
+ */
+export async function resetAllData(): Promise<void> {
+  const db = await getDb();
+  // draw_records first — it references participants.
+  await db.execute("DELETE FROM draw_records");
+  await db.execute("DELETE FROM planned_rounds");
+  await db.execute("DELETE FROM prizes");
+  await db.execute("DELETE FROM participants");
+  await db.execute("DELETE FROM sections");
+  await db.execute("DELETE FROM app_config");
+  await db.execute("INSERT INTO app_config (id) VALUES (1)");
+}

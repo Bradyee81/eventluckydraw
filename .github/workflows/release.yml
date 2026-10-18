@@ -50,6 +50,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Optional: overrides the default factory-reset password. Hashed into
+          # the app at build time (src-tauri/build.rs).
+          LUCKY_DRAW_ADMIN_PASSWORD: ${{ secrets.LUCKY_DRAW_ADMIN_PASSWORD }}
         with:
           tagName: v__VERSION__
           releaseName: Lucky Draw v__VERSION__

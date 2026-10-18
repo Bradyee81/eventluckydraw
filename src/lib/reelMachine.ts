@@ -8,6 +8,12 @@ export function useReelMachine(slotCount: number) {
   const nextStartAtRef = useRef(0);
   const timeoutsRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
+  // The Output window registers its event handlers once, on first render, when
+  // slotCount is still the default. Reading the live count from a ref keeps
+  // roll/reset covering every reel (e.g. 7–12) instead of that stale default.
+  const slotCountRef = useRef(slotCount);
+  slotCountRef.current = slotCount;
+
   const clearPending = useCallback((index: number) => {
     const t = timeoutsRef.current.get(index);
     if (t) {
@@ -47,7 +53,7 @@ export function useReelMachine(slotCount: number) {
     timeoutsRef.current.forEach((t) => clearTimeout(t));
     timeoutsRef.current.clear();
     nextStartAtRef.current = 0;
-    setStatuses((prev) => prev.map(() => "rolling" as ReelStatus));
+    setStatuses(Array<ReelStatus>(slotCountRef.current).fill("rolling"));
   }, []);
 
   const markLanded = useCallback((index: number) => {
@@ -78,14 +84,14 @@ export function useReelMachine(slotCount: number) {
 
   const reset = useCallback(
     (newSlotCount?: number) => {
-      const count = newSlotCount ?? slotCount;
+      const count = newSlotCount ?? slotCountRef.current;
       timeoutsRef.current.forEach((t) => clearTimeout(t));
       timeoutsRef.current.clear();
       nextStartAtRef.current = 0;
       setStatuses(Array<ReelStatus>(count).fill("idle"));
       setDigits(Array(count).fill(null));
     },
-    [slotCount]
+    []
   );
 
   return { statuses, digits, setDigit, roll, markLanded, undoDigit, reset };

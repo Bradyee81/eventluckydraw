@@ -15,7 +15,7 @@ const NAV: { id: Screen; label: string }[] = [
   { id: "setup", label: "Setup" },
   { id: "config", label: "Config" },
   { id: "display", label: "Display Settings" },
-  { id: "draw", label: "Draw" },
+  { id: "draw", label: "Manual Draw" },
   { id: "auto-draw", label: "Auto Draw" },
   { id: "results", label: "Results" },
 ];

@@ -48,6 +48,11 @@ export function SlotReel({
     if (status === "rolling") {
       el.style.transition = "none";
       el.style.backgroundPositionY = "0px";
+      // Each reel gets its own speed and a random point in its loop, so the
+      // reels spin out of step like a real machine instead of in unison.
+      const duration = 0.6 + Math.random() * 0.6;
+      el.style.animationDuration = `${duration.toFixed(2)}s`;
+      el.style.animationDelay = `-${(Math.random() * duration).toFixed(2)}s`;
       el.classList.add("animate-rolling-spin");
       return;
     }

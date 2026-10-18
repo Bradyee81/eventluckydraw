@@ -1,6 +1,6 @@
 [package]
 name = "lucky-draw"
-version = "0.2.6"
+version = "0.2.7"
 description = "Offline lucky draw tool for live events"
 authors = ["Brad"]
 edition = "2021"
@@ -16,6 +16,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+sha2 = "0.10"
 
 [dependencies]
 tauri = { version = "2", features = [] }
@@ -27,6 +28,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tiny_http = "0.12"
 serialport = "4"
+sha2 = "0.10"
 tauri-plugin-process = "2"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

@@ -67,7 +67,7 @@ The app never updates by itself, so it won't restart during a show. Just don't p
 1. **Setup**: import the participant list and prize list (or download the templates from this screen).
 2. **Config**: set the number of slots to match your ticket length, and connect the buzzer if you're using one.
 3. **Display Settings**: pick a background colour and set the title and footer text.
-4. **Draw** or **Auto Draw**: press **Present** to send the Output window fullscreen on the second display, then run the draws.
+4. **Manual Draw** or **Auto Draw**: press **Present** to send the Output window fullscreen on the second display, then run the draws.
 5. **Results**: export the winner list when you're done.
 
 Closing the Control window closes the whole app, including the Output window.
@@ -75,6 +75,12 @@ Closing the Control window closes the whole app, including the Output window.
 ## Where data is stored
 
 Everything lives in a local database at `%APPDATA%\com.brad.luckydraw`. Updating or reinstalling the app keeps it. Uninstalling only removes it if you tick **Delete the application data** in the uninstaller.
+
+### Starting fresh for a new event
+
+**Config → Factory reset** clears participants, prizes, results, planned rounds, draws and every setting. It asks for the admin password, which is `admin` unless your build sets its own. Export your results first if you need them.
+
+If a custom admin password is forgotten, there's no recovery inside the app. Uninstall Lucky Draw with **Delete the application data** ticked, then install it again.
 
 ---
 
@@ -112,6 +118,8 @@ The first run also builds the buzzer flash tool, which takes a few minutes. Late
 The workflow builds the installer on Windows, signs the update, and publishes release `v<version>` with the installer and `latest.json`. Installed apps pick it up the next time they open.
 
 Update signing uses a private key that is **not** in this repo. It's stored in the repository's GitHub Actions secrets as `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Keep a backup of the key. If it's lost, already-installed copies can no longer accept updates and everyone has to reinstall manually.
+
+The factory-reset admin password defaults to `admin`. It's a guard against accidental resets, not a security lock. For a private password, add a `LUCKY_DRAW_ADMIN_PASSWORD` repository secret: `src-tauri/build.rs` hashes it at build time, so only the hash ends up in the app. It takes effect from the next release.
 
 ### Third-party components
 

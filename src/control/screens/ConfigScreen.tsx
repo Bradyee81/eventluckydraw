@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppData } from "../AppDataContext";
+import { FactoryResetSection } from "../../components/FactoryResetSection";
 import { DEFAULT_DIGIT_STRIP } from "../../types";
 import {
   detectWifiCredentials,
@@ -244,6 +245,8 @@ export function ConfigScreen() {
       </section>
 
       <BuzzerSetupSection />
+
+      <FactoryResetSection />
     </div>
   );
 }

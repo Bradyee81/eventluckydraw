@@ -1,7 +1,9 @@
 use tauri::{Manager, WindowEvent};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+mod admin;
 mod buzzer;
+mod password_hash;
 mod provisioning;
 
 fn migrations() -> Vec<Migration> {
@@ -75,6 +77,7 @@ pub fn run() {
             provisioning::detect_local_ip,
             provisioning::detect_wifi_credentials,
             provisioning::provision_buzzer,
+            admin::verify_admin_password,
         ])
         .setup(|app| {
             buzzer::spawn(app.handle().clone());

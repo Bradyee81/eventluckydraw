@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import {
+  resetAllData,
   getConfig,
   listKnownSections,
   listParticipants,
@@ -24,6 +25,8 @@ interface AppDataValue {
   /** Switches the current section, and the slot count with it if the section has its own. */
   selectSection: (name: string) => Promise<void>;
   setSectionSlotCount: (name: string, slotCount: number | null) => Promise<void>;
+  /** Wipes all event data and settings, and clears the Output window. */
+  factoryReset: () => Promise<void>;
 }
 
 const AppDataContext = createContext<AppDataValue | null>(null);
@@ -91,6 +94,25 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [config, refreshSections, updateConfig]
   );
 
+  const factoryReset = useCallback(
+    async () => {
+      await resetAllData();
+      try {
+        localStorage.removeItem("autoDraw.onePrizePerRound");
+        localStorage.removeItem("manualDraw.skipValidation");
+      } catch {
+        // Nothing stored — fine.
+      }
+      const cfg = await getConfig();
+      setConfig(cfg);
+      await emitEvent("config:updated", cfg);
+      await emitEvent("draw:hide-result", {});
+      await emitEvent("draw:reset", {});
+      await refreshParticipants();
+    },
+    [refreshParticipants]
+  );
+
   return (
     <AppDataContext.Provider
       value={{
@@ -105,6 +127,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         updateConfig,
         selectSection,
         setSectionSlotCount,
+        factoryReset,
       }}
     >
       {children}

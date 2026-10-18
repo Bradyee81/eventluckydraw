@@ -287,7 +287,7 @@ export function SetupScreen() {
         <h2 className="mb-1 font-semibold">Draws</h2>
         <p className="mb-4 text-xs text-white/50">
           Give each draw its own number of digit slots, e.g. Lucky Draw = 4, Grand Lucky Draw = 7.
-          Selecting a draw on the Draw or Auto Draw screen switches the slots automatically. Draws
+          Selecting a draw on the Manual Draw or Auto Draw screen switches the slots automatically. Draws
           also come from the section names in your prize list.
         </p>
         {knownSections.length > 0 ? (
