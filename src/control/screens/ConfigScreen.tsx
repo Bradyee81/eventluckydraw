@@ -163,7 +163,8 @@ export function ConfigScreen() {
           </span>
         </div>
         <p className="mt-1 text-xs text-white/40">
-          4–12 slots, based on the ticket digit length for this event.
+          4–12 slots, based on the ticket digit length. Draws with their own slot count (Setup →
+          Draws) switch to it automatically when selected.
         </p>
       </section>
 

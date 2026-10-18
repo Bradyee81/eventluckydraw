@@ -105,8 +105,9 @@ The first run also builds the buzzer flash tool, which takes a few minutes. Late
 ### Releasing a new version
 
 1. Bump `version` in `package.json` and `src-tauri/Cargo.toml`.
-2. Commit and push to `main`.
-3. In GitHub, open **Actions → Release → Run workflow**.
+2. Write what changed in `release-notes.md`. The app shows it under **What's new**.
+3. Commit and push to `main`.
+4. In GitHub, open **Actions → Release → Run workflow**.
 
 The workflow builds the installer on Windows, signs the update, and publishes release `v<version>` with the installer and `latest.json`. Installed apps pick it up the next time they open.
 

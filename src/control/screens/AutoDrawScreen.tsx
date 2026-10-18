@@ -19,7 +19,13 @@ import { SectionControl } from "../../components/SectionControl";
 import { RecentDraws } from "../../components/RecentDraws";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { PrizeFormModal } from "../../components/PrizeFormModal";
-import type { DrawRecord, Participant, PlannedRound, Prize } from "../../types";
+import {
+  participantsForSection,
+  type DrawRecord,
+  type Participant,
+  type PlannedRound,
+  type Prize,
+} from "../../types";
 
 const dropdownStyle = { backgroundColor: "#10141F", color: "#E6E9EF" };
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -58,7 +64,15 @@ interface WinnerEntry {
 }
 
 export function AutoDrawScreen() {
-  const { config, participants, updateConfig, buzzerConnected } = useAppData();
+  const {
+    config,
+    participants,
+    knownSections,
+    sectionSettings,
+    selectSection,
+    refreshSections,
+    buzzerConnected,
+  } = useAppData();
   const currentSection = config?.current_section ?? "";
   const { presenting, toggle: togglePresent } = usePresentToggle();
 
@@ -68,6 +82,8 @@ export function AutoDrawScreen() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [activeRoundId, setActiveRoundId] = useState<number | null>(null);
+  // Slot count the in-progress round was drawn with, so the reveal matches it.
+  const [roundSlotCount, setRoundSlotCount] = useState<number | null>(null);
   const [winners, setWinners] = useState<WinnerEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -93,7 +109,8 @@ export function AutoDrawScreen() {
 
   const refreshPrizes = useCallback(() => {
     listPrizes().then(setPrizes);
-  }, []);
+    refreshSections();
+  }, [refreshSections]);
 
   useEffect(() => {
     refreshRecent();
@@ -119,7 +136,7 @@ export function AutoDrawScreen() {
 
   const loadPlannedRound = (round: PlannedRound) => {
     setExcludeRepeats(!!round.exclude_repeat_winners);
-    updateConfig({ current_section: round.section });
+    selectSection(round.section);
     setActiveRoundId(round.id);
   };
 
@@ -133,14 +150,15 @@ export function AutoDrawScreen() {
       setBusy(true);
       try {
         if (isDrawing) {
+          const slots = roundSlotCount ?? config.slot_count;
           for (let i = 0; i < winners.length; i++) {
             const w = winners[i];
-            const digits = ticketToDigits(w.participant.ticket_number, config.slot_count);
+            const digits = ticketToDigits(w.participant.ticket_number, slots);
             if (!digits) continue; // validated when the round started, shouldn't happen
 
             if (i > 0) emitEvent("draw:roll", {});
             digits.forEach((digit, index) => emitEvent("draw:digit-set", { index, digit }));
-            await sleep(worstCaseRevealMs(config.slot_count) + 500);
+            await sleep(worstCaseRevealMs(slots) + 500);
 
             const sectionSequence = await insertDrawRecord({
               number: digits.join(""),
@@ -169,13 +187,19 @@ export function AutoDrawScreen() {
         setError(null);
         setNotice(null);
         setResultShownSection(null);
-        updateConfig({ current_section: section });
+        await selectSection(section);
         setExcludeRepeats(exclude);
+        // Read straight from settings: `config` in this closure predates selectSection.
+        const slots =
+          sectionSettings.find((st) => st.name === section)?.slot_count ?? config.slot_count;
 
         const plan = buildPrizePlan(prizes.filter((p) => p.section === section));
 
-        if (participants.length === 0) {
-          setError("No participant list loaded. Import one on the Setup screen first.");
+        const sectionParticipants = participantsForSection(participants, section);
+        if (sectionParticipants.length === 0) {
+          setError(
+            `No participants for "${section}". Import its list on the Setup screen first.`
+          );
           return;
         }
         if (plan.length === 0) {
@@ -183,10 +207,10 @@ export function AutoDrawScreen() {
           return;
         }
 
-        let pool = participants;
+        let pool = sectionParticipants;
         if (exclude) {
           const priorWinnerIds = await listPriorWinnerIds();
-          pool = participants.filter((p) => !priorWinnerIds.has(p.id));
+          pool = sectionParticipants.filter((p) => !priorWinnerIds.has(p.id));
         }
         if (pool.length === 0) {
           setError("No eligible participants left to draw from (everyone has already won).");
@@ -201,9 +225,9 @@ export function AutoDrawScreen() {
         }
 
         for (const p of picks) {
-          if (ticketToDigits(p.ticket_number, config.slot_count) === null) {
+          if (ticketToDigits(p.ticket_number, slots) === null) {
             setError(
-              `Ticket "${p.ticket_number}" (${p.name}) doesn't fit the configured slot count (${config.slot_count}). Fix Config before running Auto Mode.`
+              `Ticket "${p.ticket_number}" (${p.name}) has more digits than "${section}" has slots (${slots}). Set its slot count under Setup → Draws.`
             );
             return;
           }
@@ -217,13 +241,25 @@ export function AutoDrawScreen() {
             revealed: false,
           }))
         );
+        setRoundSlotCount(slots);
         setIsDrawing(true);
         emitEvent("draw:roll", {});
       } finally {
         setBusy(false);
       }
     },
-    [config, busy, isDrawing, winners, participants, prizes, updateConfig, refreshRecent]
+    [
+      config,
+      busy,
+      isDrawing,
+      winners,
+      roundSlotCount,
+      participants,
+      prizes,
+      sectionSettings,
+      selectSection,
+      refreshRecent,
+    ]
   );
 
   // The physical buzzer drives the same flow as the on-screen button — first
@@ -305,7 +341,8 @@ export function AutoDrawScreen() {
             </span>
             <SectionControl
               section={currentSection}
-              onSave={(name) => updateConfig({ current_section: name })}
+              suggestions={knownSections}
+              onSave={selectSection}
             />
             <button
               onClick={togglePresent}
@@ -330,7 +367,7 @@ export function AutoDrawScreen() {
                 <select
                   value={currentSection}
                   onChange={(e) => {
-                    updateConfig({ current_section: e.target.value });
+                    selectSection(e.target.value);
                     setActiveRoundId(null);
                   }}
                   disabled={isDrawing}

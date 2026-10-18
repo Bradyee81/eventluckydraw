@@ -9,6 +9,7 @@ import {
   clearParticipants,
   deleteParticipant,
   deletePrize,
+  deleteSectionSetting,
   listPrizes,
   replaceParticipants,
   replacePrizes,
@@ -19,8 +20,65 @@ import { ConfirmModal } from "../../components/ConfirmModal";
 import { PrizeFormModal } from "../../components/PrizeFormModal";
 import type { Participant, Prize } from "../../types";
 
+const dropdownStyle = { backgroundColor: "#10141F", color: "#E6E9EF" };
+const SLOT_OPTIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+/** Picks which draw a ticket belongs to; '' = every draw. */
+function DrawSelect({
+  value,
+  sections,
+  onChange,
+  className = "",
+}: {
+  value: string;
+  sections: string[];
+  onChange: (section: string) => void;
+  className?: string;
+}) {
+  const options = value && !sections.includes(value) ? [...sections, value] : sections;
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={dropdownStyle}
+      className={`rounded-md border border-white/15 bg-white/5 px-2 py-2 text-sm outline-none focus:border-[#F5C518] ${className}`}
+    >
+      <option value="" style={dropdownStyle}>
+        All draws
+      </option>
+      {options.map((s) => (
+        <option key={s} value={s} style={dropdownStyle}>
+          {s}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export function SetupScreen() {
-  const { participants, refreshParticipants } = useAppData();
+  const {
+    config,
+    participants,
+    refreshParticipants,
+    knownSections,
+    sectionSettings,
+    refreshSections,
+    setSectionSlotCount,
+  } = useAppData();
+  const [importSection, setImportSection] = useState("");
+  const [newDrawName, setNewDrawName] = useState("");
+
+  const handleAddDraw = async () => {
+    const name = newDrawName.trim();
+    if (!name) return;
+    await setSectionSlotCount(name, null);
+    setNewDrawName("");
+  };
+
+  const handleRemoveDraw = async (name: string) => {
+    await deleteSectionSetting(name);
+    await refreshSections();
+  };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -34,9 +92,15 @@ export function SetupScreen() {
         setStatus("No rows found. Expect columns like 'Ticket Number' and 'Name'.");
         return;
       }
-      await replaceParticipants(parsed);
+      const skipped = await replaceParticipants(importSection, parsed);
       await refreshParticipants();
-      setStatus(`Imported ${parsed.length} participants from ${file.name}.`);
+      const target = importSection ? `"${importSection}"` : "all draws";
+      setStatus(
+        `Imported ${parsed.length - skipped} participants for ${target} from ${file.name}.` +
+          (skipped > 0
+            ? ` Skipped ${skipped} ticket number${skipped === 1 ? "" : "s"} already in another draw's list.`
+            : "")
+      );
     } catch (err) {
       setStatus(`Import failed: ${String(err)}`);
     } finally {
@@ -53,16 +117,18 @@ export function SetupScreen() {
 
   const [newTicket, setNewTicket] = useState("");
   const [newName, setNewName] = useState("");
+  const [newSection, setNewSection] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTicket, setEditTicket] = useState("");
   const [editName, setEditName] = useState("");
+  const [editSection, setEditSection] = useState("");
 
   const handleAddParticipant = async () => {
     const ticket = newTicket.trim();
     const name = newName.trim();
     if (!ticket) return;
     try {
-      await addParticipant({ ticket_number: ticket, name });
+      await addParticipant({ ticket_number: ticket, name, section: newSection });
       setNewTicket("");
       setNewName("");
       setStatus(null);
@@ -76,6 +142,7 @@ export function SetupScreen() {
     setEditingId(p.id);
     setEditTicket(p.ticket_number);
     setEditName(p.name);
+    setEditSection(p.section);
   };
 
   const cancelEditParticipant = () => {
@@ -86,7 +153,11 @@ export function SetupScreen() {
     const ticket = editTicket.trim();
     if (!ticket) return;
     try {
-      await updateParticipant(id, { ticket_number: ticket, name: editName.trim() });
+      await updateParticipant(id, {
+        ticket_number: ticket,
+        name: editName.trim(),
+        section: editSection,
+      });
       setEditingId(null);
       setStatus(null);
       await refreshParticipants();
@@ -122,7 +193,11 @@ export function SetupScreen() {
   const [newPrizeCount, setNewPrizeCount] = useState(1);
   const [newPrizeDescription, setNewPrizeDescription] = useState("");
 
-  const refreshPrizes = () => listPrizes().then(setPrizes);
+  const refreshPrizes = () =>
+    listPrizes().then((list) => {
+      setPrizes(list);
+      refreshSections();
+    });
 
   useEffect(() => {
     refreshPrizes();
@@ -208,7 +283,85 @@ export function SetupScreen() {
         results. Skip this step to run Manual Mode with no validation.
       </p>
 
+      <section className="mb-8 rounded-md border border-white/10 bg-white/[0.02] p-4">
+        <h2 className="mb-1 font-semibold">Draws</h2>
+        <p className="mb-4 text-xs text-white/50">
+          Give each draw its own number of digit slots, e.g. Lucky Draw = 4, Grand Lucky Draw = 7.
+          Selecting a draw on the Draw or Auto Draw screen switches the slots automatically. Draws
+          also come from the section names in your prize list.
+        </p>
+        {knownSections.length > 0 ? (
+          <ul className="mb-4 space-y-2">
+            {knownSections.map((name) => {
+              const setting = sectionSettings.find((s) => s.name === name);
+              const tagged = participants.filter((p) => p.section === name).length;
+              const inUse = tagged > 0 || prizes.some((p) => p.section === name);
+              return (
+                <li
+                  key={name}
+                  className="flex flex-wrap items-center gap-3 rounded-md border border-white/10 px-3 py-2"
+                >
+                  <span className="min-w-36 font-semibold">{name}</span>
+                  <select
+                    value={setting?.slot_count ?? ""}
+                    onChange={(e) =>
+                      setSectionSlotCount(name, e.target.value === "" ? null : Number(e.target.value))
+                    }
+                    style={dropdownStyle}
+                    className="rounded-md border border-white/15 bg-white/5 px-2 py-1.5 text-sm outline-none focus:border-[#F5C518]"
+                  >
+                    <option value="" style={dropdownStyle}>
+                      Config default ({config?.slot_count ?? 6} slots)
+                    </option>
+                    {SLOT_OPTIONS.map((n) => (
+                      <option key={n} value={n} style={dropdownStyle}>
+                        {n} slots
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-xs text-white/40">
+                    {tagged} ticket{tagged === 1 ? "" : "s"} of its own
+                  </span>
+                  {setting && !inUse && (
+                    <button
+                      onClick={() => handleRemoveDraw(name)}
+                      className="ml-auto text-xs text-[#E27676] hover:underline"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="mb-4 text-xs text-white/30">
+            No draws yet. Add one below or import a prize list.
+          </p>
+        )}
+        <div className="flex items-center gap-2">
+          <input
+            value={newDrawName}
+            onChange={(e) => setNewDrawName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleAddDraw()}
+            placeholder="e.g. Grand Lucky Draw"
+            className="w-56 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-[#F5C518]"
+          />
+          <button
+            onClick={handleAddDraw}
+            disabled={!newDrawName.trim()}
+            className="rounded-md border border-white/15 px-3 py-2 text-sm text-white/70 hover:bg-white/5 disabled:opacity-40"
+          >
+            + Add draw
+          </button>
+        </div>
+      </section>
+
       <div className="rounded-lg border border-dashed border-white/20 bg-white/[0.02] p-8 text-center">
+        <div className="mb-4 flex items-center justify-center gap-2 text-sm text-white/70">
+          This list is for
+          <DrawSelect value={importSection} sections={knownSections} onChange={setImportSection} />
+        </div>
         <input
           ref={fileInputRef}
           type="file"
@@ -227,8 +380,8 @@ export function SetupScreen() {
           {busy ? "Importing…" : "Choose CSV / Excel file"}
         </button>
         <p className="mt-3 text-xs text-white/40">
-          Expected columns: Ticket Number (or Number/ID) and Name. Re-importing replaces the
-          current list.
+          Expected columns: Ticket Number (or Number/ID) and Name. Re-importing replaces only the
+          list for the draw selected above, so import each draw's list separately.
         </p>
         <button
           onClick={downloadTemplate}
@@ -274,6 +427,10 @@ export function SetupScreen() {
             className="w-44 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-[#F5C518]"
           />
         </div>
+        <div>
+          <label className="mb-1 block text-xs text-white/60">Draw</label>
+          <DrawSelect value={newSection} sections={knownSections} onChange={setNewSection} />
+        </div>
         <button
           onClick={handleAddParticipant}
           disabled={!newTicket.trim()}
@@ -291,6 +448,7 @@ export function SetupScreen() {
               <tr>
                 <th className="px-3 py-2">Ticket #</th>
                 <th className="px-3 py-2">Name</th>
+                <th className="px-3 py-2">Draw</th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
@@ -312,6 +470,14 @@ export function SetupScreen() {
                         className="w-full rounded border border-white/15 bg-white/5 px-2 py-1 outline-none focus:border-[#F5C518]"
                       />
                     </td>
+                    <td className="px-3 py-1.5">
+                      <DrawSelect
+                        value={editSection}
+                        sections={knownSections}
+                        onChange={setEditSection}
+                        className="py-1 text-xs"
+                      />
+                    </td>
                     <td className="whitespace-nowrap px-3 py-1.5 text-right">
                       <button
                         onClick={() => saveEditParticipant(p.id)}
@@ -328,6 +494,7 @@ export function SetupScreen() {
                   <tr key={p.id} className="border-t border-white/5">
                     <td className="px-3 py-1.5 font-mono">{p.ticket_number}</td>
                     <td className="px-3 py-1.5">{p.name}</td>
+                    <td className="px-3 py-1.5 text-white/60">{p.section || "All draws"}</td>
                     <td className="whitespace-nowrap px-3 py-1.5 text-right">
                       <button
                         onClick={() => startEditParticipant(p)}

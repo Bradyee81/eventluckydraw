@@ -3,9 +3,12 @@ import { Modal } from "./Modal";
 
 export function SectionControl({
   section,
+  suggestions = [],
   onSave,
 }: {
   section: string;
+  // Known draws, offered as one-click picks.
+  suggestions?: string[];
   onSave: (name: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -16,8 +19,8 @@ export function SectionControl({
     setOpen(true);
   };
 
-  const save = () => {
-    onSave(input.trim());
+  const save = (name = input) => {
+    onSave(name.trim());
     setOpen(false);
   };
 
@@ -36,6 +39,23 @@ export function SectionControl({
             Name this section (e.g. "Grand Prize" or "Round 2"). It's attached to every draw
             logged from here on, and shown in Results.
           </p>
+          {suggestions.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {suggestions.map((name) => (
+                <button
+                  key={name}
+                  onClick={() => save(name)}
+                  className={`rounded-md border px-3 py-1.5 text-sm ${
+                    name === section
+                      ? "border-[#F5C518] text-[#F5C518]"
+                      : "border-white/15 text-white/70 hover:bg-white/5"
+                  }`}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
           <input
             autoFocus
             value={input}
@@ -55,7 +75,7 @@ export function SectionControl({
               Cancel
             </button>
             <button
-              onClick={save}
+              onClick={() => save()}
               className="rounded-md bg-[#F5C518] px-3 py-2 font-semibold text-[#10141F]"
             >
               Save

@@ -48,6 +48,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/0007_prize_catalog_sections.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 8,
+            description: "add per-section slot counts and participant draw tags",
+            sql: include_str!("../migrations/0008_section_slots_and_participant_draws.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

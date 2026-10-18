@@ -7,7 +7,7 @@ import { SectionControl } from "../../components/SectionControl";
 import { RecentDraws } from "../../components/RecentDraws";
 import { Toggle } from "../../components/Toggle";
 import { formatSectionLabel } from "../../lib/format";
-import type { DrawRecord, Participant } from "../../types";
+import { participantsForSection, type DrawRecord, type Participant } from "../../types";
 
 function nextEmptyIndex(digits: (number | null)[], from: number): number {
   for (let step = 1; step <= digits.length; step++) {
@@ -20,10 +20,11 @@ function nextEmptyIndex(digits: (number | null)[], from: number): number {
 const BUZZ_FLASH_MS = 1500;
 
 export function DrawScreen() {
-  const { config, participants, updateConfig, buzzerConnected } = useAppData();
+  const { config, participants, knownSections, selectSection, buzzerConnected } = useAppData();
   const slotCount = config?.slot_count ?? 6;
-  const hasList = participants.length > 0;
   const currentSection = config?.current_section ?? "";
+  // Only this draw's tickets (plus untagged ones) count for validation.
+  const hasList = participantsForSection(participants, currentSection).length > 0;
   const { presenting, toggle: togglePresent } = usePresentToggle();
 
   const [digits, setDigits] = useState<(number | null)[]>(() => Array(slotCount).fill(null));
@@ -76,18 +77,21 @@ export function DrawScreen() {
 
   const isComplete = digits.length === slotCount && digits.every((d) => d !== null);
 
-  const validate = useCallback(async (fullDigits: (number | null)[]) => {
-    setNotFound(false);
-    setMatch(null);
-    if (fullDigits.some((d) => d === null)) return;
-    const number = fullDigits.join("");
-    const found = await findParticipantByTicket(number);
-    if (found) {
-      setMatch(found);
-    } else {
-      setNotFound(true);
-    }
-  }, []);
+  const validate = useCallback(
+    async (fullDigits: (number | null)[]) => {
+      setNotFound(false);
+      setMatch(null);
+      if (fullDigits.some((d) => d === null)) return;
+      const number = fullDigits.join("");
+      const found = await findParticipantByTicket(number, currentSection);
+      if (found) {
+        setMatch(found);
+      } else {
+        setNotFound(true);
+      }
+    },
+    [currentSection]
+  );
 
   useEffect(() => {
     if (isComplete && hasList && !skipValidation && !confirmedNumber) {
@@ -269,7 +273,8 @@ export function DrawScreen() {
             />
             <SectionControl
               section={currentSection}
-              onSave={(name) => updateConfig({ current_section: name })}
+              suggestions={knownSections}
+              onSave={selectSection}
             />
             <button
               onClick={togglePresent}

@@ -1,5 +1,5 @@
 import Database from "@tauri-apps/plugin-sql";
-import type { AppConfig, DrawMode, DrawRecord, Participant, PlannedRound, Prize } from "../types";
+import type { AppConfig, DrawMode, DrawRecord, Participant, PlannedRound, Prize, SectionSetting } from "../types";
 
 let dbPromise: Promise<Database> | null = null;
 
@@ -32,15 +32,26 @@ export async function listParticipants(): Promise<Participant[]> {
   return db.select<Participant[]>("SELECT * FROM participants ORDER BY ticket_number ASC");
 }
 
-export async function replaceParticipants(participants: Omit<Participant, "id">[]): Promise<void> {
+/**
+ * Replaces the list for one draw (section; '' = every draw), leaving other
+ * draws' lists alone. Returns how many tickets were skipped because that
+ * ticket number already belongs to another draw's list.
+ */
+export async function replaceParticipants(
+  section: string,
+  participants: { ticket_number: string; name: string }[]
+): Promise<number> {
   const db = await getDb();
-  await db.execute("DELETE FROM participants");
+  await db.execute("DELETE FROM participants WHERE section = $1", [section]);
+  let skipped = 0;
   for (const p of participants) {
-    await db.execute(
-      "INSERT OR IGNORE INTO participants (ticket_number, name) VALUES ($1, $2)",
-      [p.ticket_number, p.name]
+    const result = await db.execute(
+      "INSERT OR IGNORE INTO participants (ticket_number, name, section) VALUES ($1, $2, $3)",
+      [p.ticket_number, p.name, section]
     );
+    if (result.rowsAffected === 0) skipped++;
   }
+  return skipped;
 }
 
 export async function clearParticipants(): Promise<void> {
@@ -48,33 +59,41 @@ export async function clearParticipants(): Promise<void> {
   await db.execute("DELETE FROM participants");
 }
 
-export async function findParticipantByTicket(ticketNumber: string): Promise<Participant | null> {
+/** Looks the ticket up among those eligible for this section (tagged for it, or untagged). */
+export async function findParticipantByTicket(
+  ticketNumber: string,
+  section: string
+): Promise<Participant | null> {
   const db = await getDb();
   const rows = await db.select<Participant[]>(
-    "SELECT * FROM participants WHERE ticket_number = $1",
-    [ticketNumber]
+    "SELECT * FROM participants WHERE ticket_number = $1 AND (section = '' OR section = $2)",
+    [ticketNumber, section]
   );
   return rows[0] ?? null;
 }
 
-export async function addParticipant(participant: { ticket_number: string; name: string }): Promise<void> {
+export async function addParticipant(participant: {
+  ticket_number: string;
+  name: string;
+  section: string;
+}): Promise<void> {
   const db = await getDb();
-  await db.execute("INSERT INTO participants (ticket_number, name) VALUES ($1, $2)", [
+  await db.execute("INSERT INTO participants (ticket_number, name, section) VALUES ($1, $2, $3)", [
     participant.ticket_number,
     participant.name,
+    participant.section,
   ]);
 }
 
 export async function updateParticipant(
   id: number,
-  patch: { ticket_number: string; name: string }
+  patch: { ticket_number: string; name: string; section: string }
 ): Promise<void> {
   const db = await getDb();
-  await db.execute("UPDATE participants SET ticket_number = $1, name = $2 WHERE id = $3", [
-    patch.ticket_number,
-    patch.name,
-    id,
-  ]);
+  await db.execute(
+    "UPDATE participants SET ticket_number = $1, name = $2, section = $3 WHERE id = $4",
+    [patch.ticket_number, patch.name, patch.section, id]
+  );
 }
 
 export async function deleteParticipant(id: number): Promise<void> {
@@ -217,4 +236,33 @@ export async function replacePrizes(
       [p.section, p.name, p.winner_count, p.description, new Date().toISOString()]
     );
   }
+}
+
+export async function listSectionSettings(): Promise<SectionSetting[]> {
+  const db = await getDb();
+  return db.select<SectionSetting[]>("SELECT * FROM sections ORDER BY rowid ASC");
+}
+
+/** Section names from every source — settings, prizes and participant tags — in first-seen order. */
+export async function listKnownSections(): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db.select<{ name: string }[]>(
+    `SELECT name FROM sections
+     UNION ALL SELECT section FROM prizes
+     UNION ALL SELECT section FROM participants`
+  );
+  return Array.from(new Set(rows.map((r) => r.name).filter(Boolean)));
+}
+
+export async function setSectionSlotCount(name: string, slotCount: number | null): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    "INSERT INTO sections (name, slot_count) VALUES ($1, $2) ON CONFLICT(name) DO UPDATE SET slot_count = excluded.slot_count",
+    [name, slotCount]
+  );
+}
+
+export async function deleteSectionSetting(name: string): Promise<void> {
+  const db = await getDb();
+  await db.execute("DELETE FROM sections WHERE name = $1", [name]);
 }

@@ -2,6 +2,20 @@ export interface Participant {
   id: number;
   ticket_number: string;
   name: string;
+  // The draw (section) this ticket belongs to, e.g. "Grand Lucky Draw".
+  // '' means the ticket is eligible in every draw.
+  section: string;
+}
+
+export interface SectionSetting {
+  name: string;
+  // Digit slots shown while this section is selected. null = use Config's slot count.
+  slot_count: number | null;
+}
+
+/** Tickets tagged for this section plus untagged ones (eligible everywhere). */
+export function participantsForSection<T extends { section: string }>(all: T[], section: string): T[] {
+  return all.filter((p) => p.section === "" || p.section === section);
 }
 
 export type DrawMode = "manual" | "auto";

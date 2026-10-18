@@ -3,8 +3,8 @@
 # read to discover updates.
 #
 # To ship a new version: bump "version" in package.json (and src-tauri/Cargo.toml),
-# commit, push, then run this workflow from the Actions tab — or push a tag
-# like v0.3.0.
+# update release-notes.md (shown in the app under "What's new"), commit, push,
+# then run this workflow from the Actions tab, or push a tag like v0.3.0.
 name: Release
 
 on:
@@ -36,6 +36,15 @@ jobs:
 
       - run: npm ci
 
+      - id: notes
+        shell: bash
+        run: |
+          {
+            echo "body<<NOTES_EOF"
+            cat release-notes.md
+            echo "NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -44,9 +53,6 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: Lucky Draw v__VERSION__
-          releaseBody: |
-            **New install:** download the file ending in `_x64-setup.exe` below and run it.
-
-            Already have Lucky Draw installed? Open it — it will offer this update on its own.
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
