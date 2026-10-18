@@ -1,5 +1,6 @@
 **What's new**
 
-- **Ticket numbers keep their leading zeros.** Importing a CSV or Excel list with tickets like 0101 or 0906 no longer turns them into 101 and 906. If you imported a list before this update, import it again so the zeros come back.
+- **One prize per round (Auto Draw).** Turn on the new switch, and each Draw press draws only the next prize in the section that still needs winners, in prize-list order. The prize list marks which prize is **Next** and which are already drawn.
+- **Show Result** now shows the winners of the round you just drew. **Show All** shows every winner in the section so far, handy for a recap at the end of a round.
 
 **New install:** download the file ending in `_x64-setup.exe` below and run it. Already have Lucky Draw 0.2.0 or later? Open it and press **Update now**.

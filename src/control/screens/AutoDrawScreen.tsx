@@ -18,6 +18,7 @@ import {
 import { SectionControl } from "../../components/SectionControl";
 import { RecentDraws } from "../../components/RecentDraws";
 import { ConfirmModal } from "../../components/ConfirmModal";
+import { Toggle } from "../../components/Toggle";
 import { PrizeFormModal } from "../../components/PrizeFormModal";
 import {
   participantsForSection,
@@ -56,6 +57,40 @@ function buildPrizePlan(sectionPrizes: Prize[]): string[] {
   return plan;
 }
 
+interface PrizeProgress {
+  prize: Prize;
+  drawn: number;
+  remaining: number;
+}
+
+/** How many winners each prize in a section already has, matching logged
+ *  auto draws to prizes by name in list order (so two "Voucher" rows fill
+ *  up one after the other). */
+function prizeProgress(sectionPrizes: Prize[], sectionRecords: DrawRecord[]): PrizeProgress[] {
+  const drawnByName = new Map<string, number>();
+  for (const r of sectionRecords) {
+    if (r.mode === "auto" && r.prize_name) {
+      drawnByName.set(r.prize_name, (drawnByName.get(r.prize_name) ?? 0) + 1);
+    }
+  }
+  return sectionPrizes.map((prize) => {
+    const available = drawnByName.get(prize.name) ?? 0;
+    const drawn = Math.min(available, prize.winner_count);
+    drawnByName.set(prize.name, available - drawn);
+    return { prize, drawn, remaining: prize.winner_count - drawn };
+  });
+}
+
+const ONE_PRIZE_KEY = "autoDraw.onePrizePerRound";
+
+function loadOnePrizePref(): boolean {
+  try {
+    return localStorage.getItem(ONE_PRIZE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 interface WinnerEntry {
   participant: Participant;
   prizeName: string;
@@ -87,8 +122,16 @@ export function AutoDrawScreen() {
   const [winners, setWinners] = useState<WinnerEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [resultShownSection, setResultShownSection] = useState<string | null>(null);
+  // Which result is on the Output window: "latest" (the last round) or
+  // "section:<name>" (everything drawn in that section).
+  const [resultShown, setResultShown] = useState<string | null>(null);
   const [recentRecords, setRecentRecords] = useState<DrawRecord[]>([]);
+  const [allRecords, setAllRecords] = useState<DrawRecord[]>([]);
+  // When on, each round draws only the next prize in the section that still
+  // needs winners, instead of every prize in the section at once.
+  const [onePrizePerRound, setOnePrizePerRound] = useState(loadOnePrizePref);
+  // Section + prize of the most recent round, for "Show Result".
+  const [lastRound, setLastRound] = useState<{ section: string; prizeName: string | null } | null>(null);
   const [editingPrize, setEditingPrize] = useState<Prize | null>(null);
   const [deletingPrize, setDeletingPrize] = useState<Prize | null>(null);
 
@@ -98,9 +141,26 @@ export function AutoDrawScreen() {
 
   const sectionPrizes = prizes.filter((p) => p.section === currentSection);
   const prizePlan = buildPrizePlan(sectionPrizes);
+  const progress = prizeProgress(
+    sectionPrizes,
+    allRecords.filter((r) => r.section === currentSection)
+  );
+  const nextPrize = progress.find((p) => p.remaining > 0) ?? null;
+
+  const changeOnePrizePerRound = (value: boolean) => {
+    setOnePrizePerRound(value);
+    try {
+      localStorage.setItem(ONE_PRIZE_KEY, value ? "1" : "0");
+    } catch {
+      // Preference just won't persist — the toggle still works.
+    }
+  };
 
   const refreshRecent = useCallback(() => {
-    listDrawRecords().then((records) => setRecentRecords(records.slice(0, 8)));
+    listDrawRecords().then((records) => {
+      setAllRecords(records);
+      setRecentRecords(records.slice(0, 8));
+    });
   }, []);
 
   const refreshPlannedRounds = useCallback(() => {
@@ -144,6 +204,8 @@ export function AutoDrawScreen() {
   // buzzer, both call this the same way:
   //  - no round in progress -> pick every winner for the round and start rolling
   //  - round in progress    -> reveal the whole round in one quick cascade
+  // A round is every prize in the section, or with "One prize per round" on,
+  // just the next prize that still needs winners.
   const beginOrAdvance = useCallback(
     async (section: string, exclude: boolean) => {
       if (!config || busy || !section) return;
@@ -186,14 +248,29 @@ export function AutoDrawScreen() {
 
         setError(null);
         setNotice(null);
-        setResultShownSection(null);
+        if (resultShown) emitEvent("draw:hide-result", {});
+        setResultShown(null);
         await selectSection(section);
         setExcludeRepeats(exclude);
         // Read straight from settings: `config` in this closure predates selectSection.
         const slots =
           sectionSettings.find((st) => st.name === section)?.slot_count ?? config.slot_count;
 
-        const plan = buildPrizePlan(prizes.filter((p) => p.section === section));
+        const allSectionPrizes = prizes.filter((p) => p.section === section);
+        let plan = buildPrizePlan(allSectionPrizes);
+        let roundPrizeName: string | null = null;
+        if (onePrizePerRound && allSectionPrizes.length > 0) {
+          const sectionRecords = (await listDrawRecords()).filter((r) => r.section === section);
+          const next = prizeProgress(allSectionPrizes, sectionRecords).find((p) => p.remaining > 0);
+          if (!next) {
+            setError(
+              `Every prize in "${section}" has been drawn. Clear its results on the Results screen to draw it again.`
+            );
+            return;
+          }
+          plan = Array(next.remaining).fill(next.prize.name);
+          roundPrizeName = next.prize.name;
+        }
 
         const sectionParticipants = participantsForSection(participants, section);
         if (sectionParticipants.length === 0) {
@@ -242,6 +319,7 @@ export function AutoDrawScreen() {
           }))
         );
         setRoundSlotCount(slots);
+        setLastRound({ section, prizeName: roundPrizeName });
         setIsDrawing(true);
         emitEvent("draw:roll", {});
       } finally {
@@ -254,6 +332,8 @@ export function AutoDrawScreen() {
       isDrawing,
       winners,
       roundSlotCount,
+      onePrizePerRound,
+      resultShown,
       participants,
       prizes,
       sectionSettings,
@@ -277,9 +357,10 @@ export function AutoDrawScreen() {
   // re-reveal any past section's winner list even after moving on to a
   // later round (winners only holds the most recently drawn round).
   const toggleShowResultsFor = async (section: string) => {
-    if (resultShownSection === section) {
+    const key = `section:${section}`;
+    if (resultShown === key) {
       emitEvent("draw:hide-result", {});
-      setResultShownSection(null);
+      setResultShown(null);
       return;
     }
     if (!section) return;
@@ -295,8 +376,29 @@ export function AutoDrawScreen() {
         prize: r.prize_name || undefined,
       })),
     });
-    setResultShownSection(section);
+    setResultShown(key);
   };
+
+  // Just the most recent round, e.g. one prize's winner(s) in one-prize mode.
+  const toggleShowLatest = () => {
+    if (resultShown === "latest") {
+      emitEvent("draw:hide-result", {});
+      setResultShown(null);
+      return;
+    }
+    const revealed = winners.filter((w) => w.revealed);
+    if (!lastRound || revealed.length === 0) return;
+    emitEvent("draw:show-result", {
+      title: lastRound.prizeName ? `${lastRound.section} — ${lastRound.prizeName}` : lastRound.section,
+      entries: revealed.map((w) => ({
+        number: w.participant.ticket_number,
+        name: w.participant.name,
+        prize: w.prizeName || undefined,
+      })),
+    });
+    setResultShown("latest");
+  };
+  const canShowLatest = !isDrawing && winners.some((w) => w.revealed);
 
   const saveEditPrize = async (patch: {
     section: string;
@@ -399,13 +501,29 @@ export function AutoDrawScreen() {
               />
               Exclude previous winners
             </label>
+            <div className="pb-2">
+              <Toggle
+                checked={onePrizePerRound}
+                onChange={changeOnePrizePerRound}
+                disabled={isDrawing}
+                label="One prize per round"
+              />
+            </div>
             <button
               onClick={() => beginOrAdvance(currentSection, excludeRepeats)}
-              disabled={busy || !currentSection || (!isDrawing && prizePlan.length === 0)}
+              disabled={
+                busy ||
+                !currentSection ||
+                (!isDrawing && (onePrizePerRound ? !nextPrize : prizePlan.length === 0))
+              }
               className="rounded-md bg-[#F5C518] px-5 py-2 font-semibold text-[#10141F] disabled:opacity-50"
             >
               {!isDrawing
-                ? "Draw Round"
+                ? onePrizePerRound
+                  ? nextPrize
+                    ? "Draw Next Prize"
+                    : "All prizes drawn"
+                  : "Draw Round"
                 : busy
                   ? "Revealing…"
                   : `Reveal ${winners.length} Winner${winners.length === 1 ? "" : "s"}`}
@@ -418,15 +536,28 @@ export function AutoDrawScreen() {
               + Save as Planned Round
             </button>
             <button
-              onClick={() => toggleShowResultsFor(currentSection)}
-              disabled={!currentSection}
+              onClick={toggleShowLatest}
+              disabled={!canShowLatest && resultShown !== "latest"}
+              title="Show the winners of the round you just drew"
               className={`rounded-md px-3 py-2 text-sm font-semibold disabled:opacity-40 ${
-                resultShownSection === currentSection
+                resultShown === "latest"
                   ? "bg-white/10 text-white"
                   : "border border-[#F5C518]/40 text-[#F5C518]"
               }`}
             >
-              {resultShownSection === currentSection ? "Hide Result" : "Show Result"}
+              {resultShown === "latest" ? "Hide Result" : "Show Result"}
+            </button>
+            <button
+              onClick={() => toggleShowResultsFor(currentSection)}
+              disabled={!currentSection}
+              title="Show every winner drawn so far in this section"
+              className={`rounded-md px-3 py-2 text-sm font-semibold disabled:opacity-40 ${
+                resultShown === `section:${currentSection}`
+                  ? "bg-white/10 text-white"
+                  : "border border-white/15 text-white/70 hover:bg-white/5"
+              }`}
+            >
+              {resultShown === `section:${currentSection}` ? "Hide All" : "Show All"}
             </button>
           </div>
 
@@ -435,14 +566,28 @@ export function AutoDrawScreen() {
               {sectionPrizes.length > 0 ? (
                 <>
                   <div className="space-y-1">
-                    {sectionPrizes.map((p) => (
+                    {progress.map(({ prize: p, drawn, remaining }) => {
+                      const isNext = onePrizePerRound && nextPrize?.prize.id === p.id;
+                      return (
                       <div
                         key={p.id}
-                        className="flex items-center justify-between rounded-md border border-white/10 bg-white/[0.02] px-3 py-1.5"
+                        className={`flex items-center justify-between rounded-md border px-3 py-1.5 ${
+                          isNext
+                            ? "border-[#F5C518]/60 bg-[#F5C518]/10"
+                            : "border-white/10 bg-white/[0.02]"
+                        } ${remaining === 0 ? "opacity-50" : ""}`}
                       >
                         <span>
+                          {isNext && (
+                            <span className="mr-2 rounded bg-[#F5C518] px-1.5 py-0.5 text-[10px] font-bold uppercase text-[#10141F]">
+                              Next
+                            </span>
+                          )}
                           <span className="font-semibold text-[#F5C518]">{p.name}</span>
                           <span className="text-white/50"> × {p.winner_count}</span>
+                          <span className="ml-2 text-xs text-white/40">
+                            {remaining === 0 ? "✓ drawn" : drawn > 0 ? `${drawn}/${p.winner_count} drawn` : ""}
+                          </span>
                           {p.description && (
                             <span className="ml-2 text-xs text-white/40">{p.description}</span>
                           )}
@@ -462,11 +607,14 @@ export function AutoDrawScreen() {
                           </button>
                         </span>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <p className="mt-2 text-xs text-white/40">
                     {prizePlan.length} total winner{prizePlan.length === 1 ? "" : "s"} for "
                     {currentSection}"
+                    {onePrizePerRound &&
+                      ` — ${progress.filter((x) => x.remaining === 0).length} of ${progress.length} prizes drawn`}
                   </p>
                 </>
               ) : (
@@ -525,12 +673,12 @@ export function AutoDrawScreen() {
                       <button
                         onClick={() => toggleShowResultsFor(round.section)}
                         className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
-                          resultShownSection === round.section
+                          resultShown === `section:${round.section}`
                             ? "bg-white/10 text-white"
                             : "border border-[#F5C518]/40 text-[#F5C518]"
                         }`}
                       >
-                        {resultShownSection === round.section ? "Hide Result" : "Show Result"}
+                        {resultShown === `section:${round.section}` ? "Hide All" : "Show All"}
                       </button>
                       <button
                         onClick={() => handleDeletePlannedRound(round.id)}
