@@ -4,6 +4,19 @@ import type { DrawRecord } from "../types";
 const TICKET_HEADER_ALIASES = ["ticket number", "ticket_number", "ticket", "number", "no", "id"];
 const NAME_HEADER_ALIASES = ["name", "full name", "participant", "participant name"];
 
+/**
+ * Reads every cell as the text shown in the file, so ticket numbers like
+ * "0101" keep their leading zero instead of being parsed as the number 101.
+ */
+async function readFirstSheetRows(file: File): Promise<Record<string, unknown>[]> {
+  const buffer = await file.arrayBuffer();
+  // raw: true stops CSV/text values being converted to numbers on read.
+  const workbook = XLSX.read(buffer, { type: "array", raw: true });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  // raw: false returns Excel cells as displayed (e.g. a "0000" number format).
+  return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false });
+}
+
 function normalizeHeader(h: string) {
   return h.trim().toLowerCase();
 }
@@ -14,11 +27,7 @@ export interface ParsedParticipant {
 }
 
 export async function parseParticipantFile(file: File): Promise<ParsedParticipant[]> {
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: "array" });
-  const firstSheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[firstSheetName];
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+  const rows = await readFirstSheetRows(file);
 
   if (rows.length === 0) return [];
 
@@ -52,11 +61,7 @@ export interface ParsedPrize {
 }
 
 export async function parsePrizeFile(file: File): Promise<ParsedPrize[]> {
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: "array" });
-  const firstSheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[firstSheetName];
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+  const rows = await readFirstSheetRows(file);
 
   if (rows.length === 0) return [];
 
