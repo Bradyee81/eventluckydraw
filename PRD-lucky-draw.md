@@ -51,14 +51,14 @@ One desktop app (Tauri), two modes, sharing the same participant/prize data mode
 | Screen               | Purpose                                                                                                                                                                                                                              |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Setup**            | Import participant list (CSV/Excel) — optional. If skipped, Manual Mode runs with no validation                                                                                                                                      |
-| **Config**           | Set number of slots (5–12, based on ticket digit length for this event); set slot design (digit strip image)                                                                                                                         |
+| **Config**           | Set number of slots (4–12, based on ticket digit length for this event); set slot design (digit strip image)                                                                                                                         |
 | **Draw**             | Operator control: text input for the number being announced, "Confirm" action, live status of which slots have locked                                                                                                                |
 | **Display Settings** | Background chroma key color, selectable from a curated palette of 6–8 preset options (see FR19); fixed text slots (title, footer/sponsor line) with font, size, color, alignment controls                                            |
 | **Output Window**    | Fullscreen, hardware-facing (routes to switcher/capture card). Idle state = slots spinning continuously. "Present" button on Draw screen pushes to fullscreen on this window; "Exit Present" returns to idle without closing the app |
 
 ### 6.2 Functional requirements
 
-- **FR1 — Slot count:** App supports 5 to 12 configurable slots per event, set on the Config screen
+- **FR1 — Slot count:** App supports 4 to 12 configurable slots per event, set on the Config screen
 - **FR2 — Digit strip rendering:** Each slot renders a vertical sprite strip image (digits 0–9, stacked in order, equal height per digit, no gaps). One strip design is shared across all slots
 - **FR3 — Idle animation:** On the Output Window, all configured slots spin continuously on loop when no draw is in progress
 - **FR4 — Sequential lock-in:** When the operator types a number (e.g. `234781`), each corresponding slot locks to its digit **in left-to-right sequence**, matching the order typed — not all at once

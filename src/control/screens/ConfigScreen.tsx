@@ -152,7 +152,7 @@ export function ConfigScreen() {
         <div className="flex items-center gap-4">
           <input
             type="range"
-            min={5}
+            min={4}
             max={12}
             value={config.slot_count}
             onChange={(e) => updateConfig({ slot_count: Number(e.target.value) })}
@@ -163,7 +163,7 @@ export function ConfigScreen() {
           </span>
         </div>
         <p className="mt-1 text-xs text-white/40">
-          5–12 slots, based on the ticket digit length for this event.
+          4–12 slots, based on the ticket digit length for this event.
         </p>
       </section>
 
