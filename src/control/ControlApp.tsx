@@ -6,6 +6,8 @@ import { DisplayScreen } from "./screens/DisplayScreen";
 import { DrawScreen } from "./screens/DrawScreen";
 import { AutoDrawScreen } from "./screens/AutoDrawScreen";
 import { ResultsScreen } from "./screens/ResultsScreen";
+import { UpdateBanner, UpdateStatusFooter } from "../components/UpdateBanner";
+import { useAppUpdater } from "../lib/updater";
 
 type Screen = "setup" | "config" | "display" | "draw" | "auto-draw" | "results";
 
@@ -22,6 +24,7 @@ function Shell() {
   const [screen, setScreen] = useState<Screen>("draw");
   const [navCollapsed, setNavCollapsed] = useState(false);
   const { loading } = useAppData();
+  const updater = useAppUpdater();
 
   if (loading) {
     return (
@@ -68,9 +71,11 @@ function Shell() {
               {item.label}
             </button>
           ))}
+          <UpdateStatusFooter updater={updater} />
         </nav>
       )}
       <main className="min-w-0 flex-1 overflow-y-auto">
+        <UpdateBanner updater={updater} />
         {screen === "setup" && <SetupScreen />}
         {screen === "config" && <ConfigScreen />}
         {screen === "display" && <DisplayScreen />}

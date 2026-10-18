@@ -27,3 +27,6 @@ ESP32 Buzzer/Flash Buzzer.exe
 *.njsproj
 *.sln
 *.sw?
+
+# Built by scripts/build-flash-tool.mjs before each Tauri build
+src-tauri/resources/tools/

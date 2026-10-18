@@ -1,3 +1,4 @@
+use tauri::{Manager, WindowEvent};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod buzzer;
@@ -53,6 +54,8 @@ fn migrations() -> Vec<Migration> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -70,6 +73,13 @@ pub fn run() {
         .setup(|app| {
             buzzer::spawn(app.handle().clone());
             Ok(())
+        })
+        // The Output window is only useful alongside the Control window, so
+        // closing Control quits the whole app instead of leaving Output orphaned.
+        .on_window_event(|window, event| {
+            if window.label() == "control" && matches!(event, WindowEvent::Destroyed) {
+                window.app_handle().exit(0);
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

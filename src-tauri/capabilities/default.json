@@ -17,6 +17,8 @@
     "core:event:allow-emit-to",
     "core:event:allow-listen",
     "opener:default",
+    "updater:default",
+    "process:allow-restart",
     "dialog:default",
     "fs:default",
     "fs:allow-read-text-file",

@@ -1,0 +1,52 @@
+# Builds the Windows installer and publishes it as a GitHub Release.
+# The release also carries latest.json, which installed copies of the app
+# read to discover updates.
+#
+# To ship a new version: bump "version" in package.json (and src-tauri/Cargo.toml),
+# commit, push, then run this workflow from the Actions tab — or push a tag
+# like v0.3.0.
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+            ESP32 Buzzer/flash-tool -> target
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: v__VERSION__
+          releaseName: Lucky Draw v__VERSION__
+          releaseBody: |
+            **New install:** download the file ending in `_x64-setup.exe` below and run it.
+
+            Already have Lucky Draw installed? Open it — it will offer this update on its own.
+          releaseDraft: false
+          prerelease: false
