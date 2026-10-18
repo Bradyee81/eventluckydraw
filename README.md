@@ -8,7 +8,7 @@ It runs **fully offline**. Participants, prizes and results are all stored on th
 
 ## Download
 
-1. Open the [**latest release**](https://github.com/Bradyee81/eventdraw/releases/latest).
+1. Open the [**latest release**](https://github.com/Bradyee81/eventluckydraw/releases/latest).
 2. Under **Assets**, download the file ending in **`_x64-setup.exe`**.
 3. Run it and follow the installer.
 
