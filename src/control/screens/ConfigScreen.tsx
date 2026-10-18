@@ -215,6 +215,30 @@ export function ConfigScreen() {
               One vertical strip image with digits 0–9 stacked in order, equal height per digit,
               no gaps. This is shared across every slot.
             </p>
+            <div className="mt-3 max-w-sm rounded-md border border-white/10 bg-white/[0.02] p-3 text-xs text-white/60">
+              <div className="mb-1 font-semibold text-white/80">Image size</div>
+              <ul className="space-y-0.5">
+                <li>
+                  Order, top to bottom: <span className="text-white">0, 1, 2 … 9</span> (0 at the
+                  top)
+                </li>
+                <li>
+                  Each digit: <span className="text-white">2:3</span> (width:height), e.g.{" "}
+                  <span className="text-white">200 × 300 px</span>
+                </li>
+                <li>
+                  Whole strip: <span className="text-white">200 × 3000 px</span> (10 digits stacked,
+                  1:15)
+                </li>
+                <li>
+                  For 4K screens or LED walls: <span className="text-white">400 × 6000 px</span>{" "}
+                  (400 × 600 per digit)
+                </li>
+              </ul>
+              <p className="mt-1.5 text-white/40">
+                Other proportions get stretched to fit. PNG, JPG or SVG.
+              </p>
+            </div>
           </div>
         </div>
       </section>
