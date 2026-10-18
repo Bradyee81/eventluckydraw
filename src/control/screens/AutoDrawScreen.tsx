@@ -241,8 +241,9 @@ export function AutoDrawScreen() {
             refreshRecent();
           }
 
+          // No reset here: the last winner's number stays on the Output window
+          // until the next round's roll starts the reels spinning again.
           setIsDrawing(false);
-          emitEvent("draw:reset", {});
           return;
         }
 
