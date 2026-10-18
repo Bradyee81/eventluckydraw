@@ -43,6 +43,13 @@ export function useReelMachine(slotCount: number) {
     [clearPending]
   );
 
+  const roll = useCallback(() => {
+    timeoutsRef.current.forEach((t) => clearTimeout(t));
+    timeoutsRef.current.clear();
+    nextStartAtRef.current = 0;
+    setStatuses((prev) => prev.map(() => "rolling" as ReelStatus));
+  }, []);
+
   const markLanded = useCallback((index: number) => {
     setStatuses((prev) => {
       if (prev[index] !== "landing") return prev;
@@ -81,5 +88,5 @@ export function useReelMachine(slotCount: number) {
     [slotCount]
   );
 
-  return { statuses, digits, setDigit, markLanded, undoDigit, reset };
+  return { statuses, digits, setDigit, roll, markLanded, undoDigit, reset };
 }

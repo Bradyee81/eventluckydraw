@@ -30,11 +30,13 @@ export type LuckyDrawEvents = {
   "draw:digit-set": DigitSetPayload;
   "draw:digit-undo": DigitUndoPayload;
   "draw:reset": Record<string, never>;
+  "draw:roll": Record<string, never>;
   "draw:confirmed": DrawConfirmedPayload;
   "draw:show-result": ShowResultPayload;
   "draw:hide-result": Record<string, never>;
   "config:updated": AppConfig;
   "buzzer:status": { connected: boolean };
+  "buzzer:pressed": Record<string, never>;
 };
 
 export function emitEvent<K extends keyof LuckyDrawEvents>(

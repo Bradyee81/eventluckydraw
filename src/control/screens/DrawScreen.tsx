@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppData } from "../AppDataContext";
-import { emitEvent } from "../../lib/events";
+import { emitEvent, onEvent } from "../../lib/events";
 import { usePresentToggle } from "../../lib/presentWindow";
 import { findParticipantByTicket, insertDrawRecord, listDrawRecords } from "../../lib/db";
 import { SectionControl } from "../../components/SectionControl";
@@ -17,8 +17,10 @@ function nextEmptyIndex(digits: (number | null)[], from: number): number {
   return from;
 }
 
+const BUZZ_FLASH_MS = 1500;
+
 export function DrawScreen() {
-  const { config, participants, updateConfig } = useAppData();
+  const { config, participants, updateConfig, buzzerConnected } = useAppData();
   const slotCount = config?.slot_count ?? 6;
   const hasList = participants.length > 0;
   const currentSection = config?.current_section ?? "";
@@ -37,6 +39,23 @@ export function DrawScreen() {
   const [sectionSequence, setSectionSequence] = useState<number | null>(null);
   const [resultShown, setResultShown] = useState(false);
   const [skipValidation, setSkipValidation] = useState(false);
+  const [buzzed, setBuzzed] = useState(false);
+  const buzzFlashTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const unlisten = onEvent("buzzer:pressed", () => {
+      setBuzzed(true);
+      if (buzzFlashTimeout.current) clearTimeout(buzzFlashTimeout.current);
+      buzzFlashTimeout.current = setTimeout(() => setBuzzed(false), BUZZ_FLASH_MS);
+      if (!confirmedNumber) {
+        emitEvent("draw:roll", {});
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+      if (buzzFlashTimeout.current) clearTimeout(buzzFlashTimeout.current);
+    };
+  }, [confirmedNumber]);
 
   const refreshRecent = useCallback(() => {
     listDrawRecords().then((records) => setRecentRecords(records.slice(0, 8)));
@@ -234,6 +253,15 @@ export function DrawScreen() {
             </p>
           </div>
           <div className="flex items-center gap-4">
+            <span
+              className="flex items-center gap-1.5 text-xs text-white/60"
+              title={buzzerConnected ? "Buzzer connected" : "Buzzer disconnected — on-screen controls still work"}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${buzzerConnected ? "bg-[#7CD992]" : "bg-white/25"}`}
+              />
+              Buzzer {buzzerConnected ? "connected" : "disconnected"}
+            </span>
             <Toggle
               checked={skipValidation}
               onChange={setSkipValidation}
@@ -252,6 +280,22 @@ export function DrawScreen() {
               {presenting ? "Exit Present" : "Present"}
             </button>
           </div>
+        </div>
+
+        {buzzed && (
+          <div className="mb-4 inline-block rounded-md border border-[#F5C518]/40 bg-[#F5C518]/10 px-3 py-1.5 text-sm font-semibold text-[#F5C518]">
+            🔔 Buzzed in!
+          </div>
+        )}
+
+        <div className="mb-4">
+          <button
+            onClick={() => emitEvent("draw:roll", {})}
+            disabled={!!confirmedNumber}
+            className="rounded-md border border-[#F5C518]/40 px-5 py-2 font-semibold text-[#F5C518] hover:bg-[#F5C518]/10 disabled:opacity-30"
+          >
+            Draw
+          </button>
         </div>
 
         <div className="mb-4 flex flex-wrap gap-2">

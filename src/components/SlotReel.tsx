@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { EXTRA_LOOPS, LANDING_DURATION_MS } from "../lib/reelTiming";
 
-export type ReelStatus = "idle" | "landing" | "locked";
+export type ReelStatus = "idle" | "rolling" | "landing" | "locked";
 
 interface SlotReelProps {
   stripUrl: string;
@@ -36,13 +36,23 @@ export function SlotReel({
     el.style.setProperty("--idle-distance", `${cycleHeight}px`);
 
     if (status === "idle") {
+      // At rest — show digit 0 statically rather than spinning, so a roll
+      // press (physical buzzer or on-screen) is the thing that visibly
+      // starts motion instead of the reel always looking "already going."
+      el.classList.remove("animate-rolling-spin");
       el.style.transition = "none";
       el.style.backgroundPositionY = "0px";
-      el.classList.add("animate-idle-spin");
       return;
     }
 
-    el.classList.remove("animate-idle-spin");
+    if (status === "rolling") {
+      el.style.transition = "none";
+      el.style.backgroundPositionY = "0px";
+      el.classList.add("animate-rolling-spin");
+      return;
+    }
+
+    el.classList.remove("animate-rolling-spin");
 
     if (status === "landing" && digit !== null) {
       el.style.transition = "none";

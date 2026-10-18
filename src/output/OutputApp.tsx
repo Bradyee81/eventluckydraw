@@ -23,7 +23,7 @@ function useReelCellHeight(slotCount: number) {
 export function OutputApp() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const slotCount = config?.slot_count ?? 6;
-  const { statuses, digits, setDigit, markLanded, undoDigit, reset } = useReelMachine(slotCount);
+  const { statuses, digits, setDigit, roll, markLanded, undoDigit, reset } = useReelMachine(slotCount);
   const cellHeight = useReelCellHeight(slotCount);
   const [resultPopup, setResultPopup] = useState<ShowResultPayload | null>(null);
 
@@ -40,6 +40,7 @@ export function OutputApp() {
       }),
       onEvent("draw:digit-set", ({ index, digit }) => setDigit(index, digit)),
       onEvent("draw:digit-undo", ({ index }) => undoDigit(index)),
+      onEvent("draw:roll", () => roll()),
       onEvent("draw:reset", () => {
         reset();
         setResultPopup(null);

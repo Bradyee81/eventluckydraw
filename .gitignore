@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Built installers/tools — not source, don't want binaries bloating repo history.
+# See GitHub Releases for where to actually host these.
+Lucky Draw Setup.exe
+ESP32 Buzzer/Flash Buzzer.exe
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

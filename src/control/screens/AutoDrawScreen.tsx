@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAppData } from "../AppDataContext";
-import { emitEvent } from "../../lib/events";
+import { emitEvent, onEvent } from "../../lib/events";
 import { usePresentToggle } from "../../lib/presentWindow";
 import { worstCaseRevealMs } from "../../lib/reelTiming";
 import { formatSectionLabel } from "../../lib/format";
@@ -58,12 +58,16 @@ interface WinnerEntry {
 }
 
 export function AutoDrawScreen() {
-  const { config, participants, updateConfig } = useAppData();
+  const { config, participants, updateConfig, buzzerConnected } = useAppData();
   const currentSection = config?.current_section ?? "";
   const { presenting, toggle: togglePresent } = usePresentToggle();
 
   const [excludeRepeats, setExcludeRepeats] = useState(true);
+  // isDrawing = a round has been rolled and is waiting for (or running) its reveal.
+  // busy = the reveal cascade is actively animating — ignore presses until it settles.
   const [isDrawing, setIsDrawing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [activeRoundId, setActiveRoundId] = useState<number | null>(null);
   const [winners, setWinners] = useState<WinnerEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -116,97 +120,122 @@ export function AutoDrawScreen() {
   const loadPlannedRound = (round: PlannedRound) => {
     setExcludeRepeats(!!round.exclude_repeat_winners);
     updateConfig({ current_section: round.section });
+    setActiveRoundId(round.id);
   };
 
-  const runRoundFor = useCallback(
+  // Drives the round two presses total — on-screen button or physical
+  // buzzer, both call this the same way:
+  //  - no round in progress -> pick every winner for the round and start rolling
+  //  - round in progress    -> reveal the whole round in one quick cascade
+  const beginOrAdvance = useCallback(
     async (section: string, exclude: boolean) => {
-      if (!config || isDrawing || !section) return;
-      setError(null);
-      setNotice(null);
-      setResultShownSection(null);
-      updateConfig({ current_section: section });
-      setExcludeRepeats(exclude);
+      if (!config || busy || !section) return;
+      setBusy(true);
+      try {
+        if (isDrawing) {
+          for (let i = 0; i < winners.length; i++) {
+            const w = winners[i];
+            const digits = ticketToDigits(w.participant.ticket_number, config.slot_count);
+            if (!digits) continue; // validated when the round started, shouldn't happen
 
-      const plan = buildPrizePlan(prizes.filter((p) => p.section === section));
+            if (i > 0) emitEvent("draw:roll", {});
+            digits.forEach((digit, index) => emitEvent("draw:digit-set", { index, digit }));
+            await sleep(worstCaseRevealMs(config.slot_count) + 500);
 
-      if (participants.length === 0) {
-        setError("No participant list loaded. Import one on the Setup screen first.");
-        return;
-      }
-      if (plan.length === 0) {
-        setError("No prizes found for this section. Add some on the Setup screen first.");
-        return;
-      }
+            const sectionSequence = await insertDrawRecord({
+              number: digits.join(""),
+              participant_id: w.participant.id,
+              participant_name: w.participant.name,
+              operator_note: null,
+              section,
+              mode: "auto",
+              exclude_repeat_winners: exclude,
+              prize_name: w.prizeName,
+            });
 
-      let pool = participants;
-      if (exclude) {
-        const priorWinnerIds = await listPriorWinnerIds();
-        pool = participants.filter((p) => !priorWinnerIds.has(p.id));
-      }
-      if (pool.length === 0) {
-        setError("No eligible participants left to draw from (everyone has already won).");
-        return;
-      }
+            setWinners((prev) => {
+              const next = [...prev];
+              next[i] = { ...next[i], section_sequence: sectionSequence, revealed: true };
+              return next;
+            });
+            refreshRecent();
+          }
 
-      const picks = pickRandom(pool, plan.length);
-      if (picks.length < plan.length) {
-        setNotice(
-          `Only ${picks.length} eligible participant${picks.length === 1 ? "" : "s"} available — drawing ${picks.length} instead of ${plan.length}.`
-        );
-      }
-
-      for (const p of picks) {
-        if (ticketToDigits(p.ticket_number, config.slot_count) === null) {
-          setError(
-            `Ticket "${p.ticket_number}" (${p.name}) doesn't fit the configured slot count (${config.slot_count}). Fix Config before running Auto Mode.`
-          );
+          setIsDrawing(false);
+          emitEvent("draw:reset", {});
           return;
         }
+
+        setError(null);
+        setNotice(null);
+        setResultShownSection(null);
+        updateConfig({ current_section: section });
+        setExcludeRepeats(exclude);
+
+        const plan = buildPrizePlan(prizes.filter((p) => p.section === section));
+
+        if (participants.length === 0) {
+          setError("No participant list loaded. Import one on the Setup screen first.");
+          return;
+        }
+        if (plan.length === 0) {
+          setError("No prizes found for this section. Add some on the Setup screen first.");
+          return;
+        }
+
+        let pool = participants;
+        if (exclude) {
+          const priorWinnerIds = await listPriorWinnerIds();
+          pool = participants.filter((p) => !priorWinnerIds.has(p.id));
+        }
+        if (pool.length === 0) {
+          setError("No eligible participants left to draw from (everyone has already won).");
+          return;
+        }
+
+        const picks = pickRandom(pool, plan.length);
+        if (picks.length < plan.length) {
+          setNotice(
+            `Only ${picks.length} eligible participant${picks.length === 1 ? "" : "s"} available — drawing ${picks.length} instead of ${plan.length}.`
+          );
+        }
+
+        for (const p of picks) {
+          if (ticketToDigits(p.ticket_number, config.slot_count) === null) {
+            setError(
+              `Ticket "${p.ticket_number}" (${p.name}) doesn't fit the configured slot count (${config.slot_count}). Fix Config before running Auto Mode.`
+            );
+            return;
+          }
+        }
+
+        setWinners(
+          picks.map((participant, i) => ({
+            participant,
+            prizeName: plan[i],
+            section_sequence: null,
+            revealed: false,
+          }))
+        );
+        setIsDrawing(true);
+        emitEvent("draw:roll", {});
+      } finally {
+        setBusy(false);
       }
-
-      setIsDrawing(true);
-      setWinners(
-        picks.map((participant, i) => ({
-          participant,
-          prizeName: plan[i],
-          section_sequence: null,
-          revealed: false,
-        }))
-      );
-
-      for (let i = 0; i < picks.length; i++) {
-        const p = picks[i];
-        const digits = ticketToDigits(p.ticket_number, config.slot_count)!;
-
-        emitEvent("draw:reset", {});
-        await sleep(250);
-        digits.forEach((digit, index) => emitEvent("draw:digit-set", { index, digit }));
-        await sleep(worstCaseRevealMs(config.slot_count) + 500);
-
-        const sectionSequence = await insertDrawRecord({
-          number: digits.join(""),
-          participant_id: p.id,
-          participant_name: p.name,
-          operator_note: null,
-          section,
-          mode: "auto",
-          exclude_repeat_winners: exclude,
-          prize_name: plan[i],
-        });
-
-        setWinners((prev) => {
-          const next = [...prev];
-          next[i] = { ...next[i], section_sequence: sectionSequence, revealed: true };
-          return next;
-        });
-        refreshRecent();
-      }
-
-      emitEvent("draw:reset", {});
-      setIsDrawing(false);
     },
-    [config, isDrawing, participants, prizes, updateConfig, refreshRecent]
+    [config, busy, isDrawing, winners, participants, prizes, updateConfig, refreshRecent]
   );
+
+  // The physical buzzer drives the same flow as the on-screen button — first
+  // press rolls the round, second press reveals every winner in it.
+  useEffect(() => {
+    const unlisten = onEvent("buzzer:pressed", () => {
+      beginOrAdvance(currentSection, excludeRepeats);
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [beginOrAdvance, currentSection, excludeRepeats]);
 
   // Pulls from the DB rather than in-memory `winners`, so the emcee can
   // re-reveal any past section's winner list even after moving on to a
@@ -260,7 +289,20 @@ export function AutoDrawScreen() {
             <h1 className="text-xl font-bold">Auto Draw</h1>
             <p className="text-white/60">Randomly draw winners for every prize in a section.</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <span
+              className="flex items-center gap-1.5 text-xs text-white/60"
+              title={
+                buzzerConnected
+                  ? "Buzzer connected — first press rolls, second press reveals the whole round"
+                  : "Buzzer disconnected — on-screen controls still work"
+              }
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${buzzerConnected ? "bg-[#7CD992]" : "bg-white/25"}`}
+              />
+              Buzzer {buzzerConnected ? "connected" : "disconnected"}
+            </span>
             <SectionControl
               section={currentSection}
               onSave={(name) => updateConfig({ current_section: name })}
@@ -287,9 +329,13 @@ export function AutoDrawScreen() {
               {prizeSections.length > 0 ? (
                 <select
                   value={currentSection}
-                  onChange={(e) => updateConfig({ current_section: e.target.value })}
+                  onChange={(e) => {
+                    updateConfig({ current_section: e.target.value });
+                    setActiveRoundId(null);
+                  }}
+                  disabled={isDrawing}
                   style={dropdownStyle}
-                  className="w-44 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-[#F5C518]"
+                  className="w-44 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-[#F5C518] disabled:opacity-50"
                 >
                   <option value="" style={dropdownStyle}>
                     Select a section…
@@ -317,11 +363,15 @@ export function AutoDrawScreen() {
               Exclude previous winners
             </label>
             <button
-              onClick={() => runRoundFor(currentSection, excludeRepeats)}
-              disabled={isDrawing || !currentSection}
+              onClick={() => beginOrAdvance(currentSection, excludeRepeats)}
+              disabled={busy || !currentSection || (!isDrawing && prizePlan.length === 0)}
               className="rounded-md bg-[#F5C518] px-5 py-2 font-semibold text-[#10141F] disabled:opacity-50"
             >
-              {isDrawing ? "Drawing…" : "Draw Round"}
+              {!isDrawing
+                ? "Draw Round"
+                : busy
+                  ? "Revealing…"
+                  : `Reveal ${winners.length} Winner${winners.length === 1 ? "" : "s"}`}
             </button>
             <button
               onClick={handleSaveAsPlannedRound}
@@ -405,9 +455,16 @@ export function AutoDrawScreen() {
                   >
                     <button
                       onClick={() => loadPlannedRound(round)}
-                      className="flex flex-1 items-center gap-3 text-left hover:text-[#F5C518]"
+                      disabled={isDrawing}
+                      className="flex flex-1 items-center gap-3 text-left hover:text-[#F5C518] disabled:opacity-50"
                       title="Load into the controls above"
                     >
+                      <span
+                        className={`w-4 shrink-0 text-center ${round.id === activeRoundId ? "text-[#F5C518]" : "text-transparent"}`}
+                        title={round.id === activeRoundId ? "Currently loaded round" : undefined}
+                      >
+                        ✓
+                      </span>
                       <span className="font-semibold">{round.section}</span>
                       <span className="text-xs text-white/50">
                         {roundPrizes.length} prize{roundPrizes.length === 1 ? "" : "s"}, {total} winner
@@ -419,7 +476,10 @@ export function AutoDrawScreen() {
                     </button>
                     <span className="flex items-center gap-2">
                       <button
-                        onClick={() => runRoundFor(round.section, !!round.exclude_repeat_winners)}
+                        onClick={() => {
+                          loadPlannedRound(round);
+                          beginOrAdvance(round.section, !!round.exclude_repeat_winners);
+                        }}
                         disabled={isDrawing}
                         className="rounded-md bg-[#F5C518] px-3 py-1.5 text-xs font-semibold text-[#10141F] disabled:opacity-40"
                       >
@@ -455,7 +515,7 @@ export function AutoDrawScreen() {
         {winners.length > 0 && (
           <div>
             <h2 className="mb-2 text-sm font-semibold text-white/60">
-              {isDrawing ? "Revealing winners…" : "Round results"}
+              {busy ? "Revealing winners…" : isDrawing ? "Rolled — press Reveal" : "Round results"}
               {currentSection && <span className="text-white/30"> — {currentSection}</span>}
             </h2>
             <ul className="space-y-2">

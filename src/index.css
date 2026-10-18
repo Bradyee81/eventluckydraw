@@ -25,7 +25,7 @@ body {
   color: #10141F;
 }
 
-@keyframes idle-spin {
+@keyframes rolling-spin {
   0% {
     background-position-y: 0;
   }
@@ -34,8 +34,8 @@ body {
   }
 }
 
-.animate-idle-spin {
-  animation: idle-spin 0.9s linear infinite;
+.animate-rolling-spin {
+  animation: rolling-spin 0.9s linear infinite;
 }
 
 @keyframes fadeIn {

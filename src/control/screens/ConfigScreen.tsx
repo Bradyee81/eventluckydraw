@@ -1,6 +1,127 @@
-import { useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppData } from "../AppDataContext";
 import { DEFAULT_DIGIT_STRIP } from "../../types";
+import {
+  detectWifiCredentials,
+  listSerialPorts,
+  provisionBuzzer,
+  type WifiInfo,
+} from "../../lib/buzzerSetup";
+
+type ProvisionStatus = "idle" | "detecting" | "sending" | "success" | "error";
+
+function BuzzerSetupSection() {
+  const { buzzerConnected } = useAppData();
+  const [ports, setPorts] = useState<string[]>([]);
+  const [selectedPort, setSelectedPort] = useState("");
+  const [wifi, setWifi] = useState<WifiInfo | null>(null);
+  const [status, setStatus] = useState<ProvisionStatus>("idle");
+  const [message, setMessage] = useState<string | null>(null);
+
+  const refreshPorts = useCallback(() => {
+    listSerialPorts().then((found) => {
+      setPorts(found);
+      setSelectedPort((prev) => (prev && found.includes(prev) ? prev : found[0] ?? ""));
+    });
+  }, []);
+
+  useEffect(() => {
+    refreshPorts();
+    detectWifiCredentials()
+      .then(setWifi)
+      .catch(() => setWifi(null));
+  }, [refreshPorts]);
+
+  const handleConnect = async () => {
+    if (!selectedPort) return;
+    setStatus("detecting");
+    setMessage(null);
+    try {
+      const creds = await detectWifiCredentials();
+      setWifi(creds);
+      setStatus("sending");
+      const result = await provisionBuzzer({
+        port: selectedPort,
+        ssid: creds.ssid,
+        password: creds.password,
+      });
+      setStatus("success");
+      setMessage(result);
+    } catch (err) {
+      setStatus("error");
+      setMessage(String(err));
+    }
+  };
+
+  const busy = status === "detecting" || status === "sending";
+
+  return (
+    <section className="mt-8 border-t border-white/10 pt-8">
+      <label className="mb-2 block font-semibold">Buzzer setup</label>
+      <p className="mb-4 max-w-lg text-xs text-white/40">
+        Connect this laptop to the venue WiFi first, then plug the buzzer in over USB-C and press
+        Connect — it pushes this network's credentials to the buzzer so it doesn't need to be
+        reflashed at every event.
+      </p>
+
+      <div className="mb-3 flex items-center gap-1.5 text-xs text-white/60">
+        <span className={`h-2 w-2 rounded-full ${buzzerConnected ? "bg-[#7CD992]" : "bg-white/25"}`} />
+        Buzzer {buzzerConnected ? "connected" : "disconnected"}
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="mb-1 block text-xs text-white/60">USB port</label>
+          {ports.length > 0 ? (
+            <select
+              value={selectedPort}
+              onChange={(e) => setSelectedPort(e.target.value)}
+              style={{ backgroundColor: "#10141F", color: "#E6E9EF" }}
+              className="w-36 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-[#F5C518]"
+            >
+              {ports.map((p) => (
+                <option key={p} value={p} style={{ backgroundColor: "#10141F", color: "#E6E9EF" }}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-sm text-white/30">No USB devices found — plug the buzzer in.</p>
+          )}
+        </div>
+        <button
+          onClick={refreshPorts}
+          className="rounded-md border border-white/15 px-3 py-2 text-sm text-white/70 hover:bg-white/5"
+        >
+          Refresh
+        </button>
+        <button
+          onClick={handleConnect}
+          disabled={busy || !selectedPort}
+          className="rounded-md bg-[#F5C518] px-5 py-2 font-semibold text-[#10141F] disabled:opacity-50"
+        >
+          {status === "detecting"
+            ? "Reading WiFi…"
+            : status === "sending"
+              ? "Sending to buzzer…"
+              : "Connect"}
+        </button>
+      </div>
+
+      <p className="mt-2 text-xs text-white/40">
+        {wifi
+          ? `Will send: "${wifi.ssid}"`
+          : "No WiFi network detected on this laptop yet."}
+      </p>
+
+      {message && (
+        <p className={`mt-2 text-sm ${status === "error" ? "text-[#E27676]" : "text-[#7CD992]"}`}>
+          {message}
+        </p>
+      )}
+    </section>
+  );
+}
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -96,6 +217,8 @@ export function ConfigScreen() {
           </div>
         </div>
       </section>
+
+      <BuzzerSetupSection />
     </div>
   );
 }

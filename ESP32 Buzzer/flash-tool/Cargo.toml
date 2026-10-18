@@ -1,0 +1,8 @@
+[package]
+name = "flash-buzzer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+espflash = { version = "3", default-features = false, features = ["serialport"] }
+serialport = "4"

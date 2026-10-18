@@ -1,5 +1,8 @@
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+mod buzzer;
+mod provisioning;
+
 fn migrations() -> Vec<Migration> {
     vec![
         Migration {
@@ -58,6 +61,16 @@ pub fn run() {
                 .add_migrations("sqlite:lucky-draw.db", migrations())
                 .build(),
         )
+        .invoke_handler(tauri::generate_handler![
+            provisioning::list_serial_ports,
+            provisioning::detect_local_ip,
+            provisioning::detect_wifi_credentials,
+            provisioning::provision_buzzer,
+        ])
+        .setup(|app| {
+            buzzer::spawn(app.handle().clone());
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
