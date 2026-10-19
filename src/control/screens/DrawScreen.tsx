@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppData } from "../AppDataContext";
 import { emitEvent, onEvent } from "../../lib/events";
-import { usePresentToggle } from "../../lib/presentWindow";
 import { findParticipantByTicket, insertDrawRecord, listDrawRecords } from "../../lib/db";
 import { SectionControl } from "../../components/SectionControl";
 import { RecentDraws } from "../../components/RecentDraws";
@@ -36,7 +35,6 @@ export function DrawScreen() {
   const currentSection = config?.current_section ?? "";
   // Only this draw's tickets (plus untagged ones) count for validation.
   const hasList = participantsForSection(participants, currentSection).length > 0;
-  const { presenting, toggle: togglePresent } = usePresentToggle();
 
   const [digits, setDigits] = useState<(number | null)[]>(() => Array(slotCount).fill(null));
   const [activeIndex, setActiveIndex] = useState(0);
@@ -85,6 +83,17 @@ export function DrawScreen() {
       .then(() => emitEvent("draw:roll", {}));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A freshly presented Output window starts idle; get it rolling unless a
+  // confirmed number is on show.
+  useEffect(() => {
+    const unlisten = onEvent("output:ready", () => {
+      if (!confirmedNumber) emitEvent("draw:roll", {});
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [confirmedNumber]);
 
   // Fail-safe stays on/off for the whole event (remembered across tabs and
   // restarts) until someone switches it back.
@@ -308,14 +317,6 @@ export function DrawScreen() {
               suggestions={knownSections}
               onSave={(name) => selectSection(name, "manual")}
             />
-            <button
-              onClick={togglePresent}
-              className={`rounded-md px-4 py-2 font-semibold ${
-                presenting ? "bg-white/10 text-white" : "bg-[#F5C518] text-[#10141F]"
-              }`}
-            >
-              {presenting ? "Exit Present" : "Present"}
-            </button>
           </div>
         </div>
 

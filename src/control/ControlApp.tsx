@@ -7,6 +7,7 @@ import { DrawScreen } from "./screens/DrawScreen";
 import { AutoDrawScreen } from "./screens/AutoDrawScreen";
 import { ResultsScreen } from "./screens/ResultsScreen";
 import { UpdateBanner, UpdateStatusFooter } from "../components/UpdateBanner";
+import { PresentControl } from "../components/PresentControl";
 import { useAppUpdater } from "../lib/updater";
 
 type Screen = "setup" | "config" | "display" | "draw" | "auto-draw" | "results";
@@ -45,6 +46,9 @@ function Shell() {
           >
             ›
           </button>
+          <div className="mt-auto mb-3">
+            <PresentControl compact />
+          </div>
         </div>
       ) : (
         <nav className="flex w-52 shrink-0 flex-col gap-1 border-r border-white/10 bg-[#0E1320] p-3">
@@ -71,6 +75,9 @@ function Shell() {
               {item.label}
             </button>
           ))}
+          <div className="mt-auto mb-3">
+            <PresentControl />
+          </div>
           <UpdateStatusFooter updater={updater} />
         </nav>
       )}

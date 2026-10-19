@@ -37,6 +37,8 @@ export type LuckyDrawEvents = {
   "config:updated": AppConfig;
   "buzzer:status": { connected: boolean };
   "buzzer:pressed": Record<string, never>;
+  // The Output window finished loading and is listening for draw events.
+  "output:ready": Record<string, never>;
 };
 
 export function emitEvent<K extends keyof LuckyDrawEvents>(

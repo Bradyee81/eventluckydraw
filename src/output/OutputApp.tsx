@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { SlotReel } from "../components/SlotReel";
 import { useReelMachine } from "../lib/reelMachine";
 import { getConfig } from "../lib/db";
-import { onEvent, type ShowResultPayload } from "../lib/events";
+import { emitEvent, onEvent, type ShowResultPayload } from "../lib/events";
 import { DEFAULT_DIGIT_STRIP, type AppConfig } from "../types";
 
 function useReelCellHeight(slotCount: number) {
@@ -48,6 +48,8 @@ export function OutputApp() {
       onEvent("draw:show-result", (payload) => setResultPopup(payload)),
       onEvent("draw:hide-result", () => setResultPopup(null)),
     ];
+    // Tell the Control window we're listening, so it can start the reels.
+    Promise.all(unlistens).then(() => emitEvent("output:ready", {}));
     return () => {
       unlistens.forEach((p) => p.then((fn) => fn()));
     };

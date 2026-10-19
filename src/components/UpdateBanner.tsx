@@ -65,7 +65,7 @@ export function UpdateStatusFooter({ updater }: { updater: AppUpdater }) {
   else if (status === "error" && !update) message = "Couldn't check — are you online?";
 
   return (
-    <div className="mt-auto border-t border-white/10 px-2 pt-3 text-xs text-white/40">
+    <div className="border-t border-white/10 px-2 pt-3 text-xs text-white/40">
       <div>Version {currentVersion ?? "…"}</div>
       <button
         onClick={update ? updater.show : updater.checkNow}

@@ -47,7 +47,7 @@ The app never updates by itself, so it won't restart during a show. Just don't p
 - **Auto Draw**: the app picks winners at random from the participant list, in rounds. Plan rounds before the event from your prize list (section, prizes, winner count) and choose whether past winners can win again. One press reveals the whole round, and you can re-show the winner list at any time.
 
 **Output for the big screen**
-- A separate Output window that goes fullscreen with **Present**, for a projector or capture card.
+- A separate Output window for a projector or capture card. **Present** (bottom of the side menu) opens it fullscreen on the screen you pick, and **Exit Present** closes it.
 - 4–12 digit slots to match your ticket numbers, with staggered slot-machine landing.
 - Chroma-key background presets (greens and blues) so the switcher can key it out cleanly.
 - Title and footer/sponsor text with their own font, size, colour and alignment.
@@ -67,7 +67,7 @@ The app never updates by itself, so it won't restart during a show. Just don't p
 1. **Setup**: import the participant list and prize list (or download the templates from this screen).
 2. **Config**: set the number of slots to match your ticket length, and connect the buzzer if you're using one.
 3. **Display Settings**: pick a background colour and set the title and footer text.
-4. **Manual Draw** or **Auto Draw**: press **Present** to send the Output window fullscreen on the second display, then run the draws.
+4. **Present**: pick the projector screen at the bottom of the side menu and press **Present**. Then run the draws on **Manual Draw** or **Auto Draw**.
 5. **Results**: export the winner list when you're done.
 
 Closing the Control window closes the whole app, including the Output window.

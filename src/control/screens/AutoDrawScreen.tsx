@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAppData } from "../AppDataContext";
 import { emitEvent, onEvent } from "../../lib/events";
-import { usePresentToggle } from "../../lib/presentWindow";
 import { worstCaseRevealMs } from "../../lib/reelTiming";
 import { formatSectionLabel } from "../../lib/format";
 import {
@@ -110,7 +109,6 @@ export function AutoDrawScreen() {
     buzzerConnected,
   } = useAppData();
   const currentSection = config?.auto_section ?? "";
-  const { presenting, toggle: togglePresent } = usePresentToggle();
 
   const [excludeRepeats, setExcludeRepeats] = useState(true);
   // isDrawing = a round has been rolled and is waiting for (or running) its reveal.
@@ -475,14 +473,6 @@ export function AutoDrawScreen() {
               suggestions={knownSections}
               onSave={(name) => selectSection(name, "auto")}
             />
-            <button
-              onClick={togglePresent}
-              className={`rounded-md px-4 py-2 font-semibold ${
-                presenting ? "bg-white/10 text-white" : "bg-[#F5C518] text-[#10141F]"
-              }`}
-            >
-              {presenting ? "Exit Present" : "Present"}
-            </button>
           </div>
         </div>
 

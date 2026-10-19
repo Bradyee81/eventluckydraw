@@ -19,16 +19,6 @@
         "height": 800,
         "minWidth": 1024,
         "minHeight": 700
-      },
-      {
-        "label": "output",
-        "title": "Lucky Draw — Output",
-        "url": "index.html",
-        "width": 1280,
-        "height": 720,
-        "resizable": true,
-        "decorations": true,
-        "visible": true
       }
     ],
     "security": {
