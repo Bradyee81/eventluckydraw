@@ -59,14 +59,14 @@ The app never updates by itself, so it won't restart during a show. Just don't p
 
 **Physical buzzer (optional)**
 - An ESP32 push-button buzzer starts the roll and reveal over the local WiFi.
-- Set-up is plug-and-play: connect the buzzer by USB, open **Config → Buzzer Setup**, press **Connect**. The app sends it the laptop's current WiFi and address, with no reflashing needed for a new venue.
+- Set-up is plug-and-play: connect the buzzer by USB, open **Setup → Config → Buzzer Setup**, press **Connect**. The app sends it the laptop's current WiFi and address, with no reflashing needed for a new venue.
 - The on-screen buttons always work too, so a disconnected buzzer never stops the show.
 
 ## Typical event flow
 
-1. **Setup**: import the participant list and prize list (or download the templates from this screen).
-2. **Config**: set the number of slots to match your ticket length, and connect the buzzer if you're using one.
-3. **Display Settings**: pick a background colour and set the title and footer text.
+1. **Setup → Setup tab**: import the participant list and prize list (or download the templates here), and set each draw's slot count under **Draws**.
+2. **Setup → Config tab**: set the default slot count and digit strip, and connect the buzzer if you're using one.
+3. **Setup → Display Settings tab**: pick a background colour and set the title and footer text.
 4. **Present**: pick the projector screen at the bottom of the side menu and press **Present**. Then run the draws on **Manual Draw** or **Auto Draw**.
 5. **Results**: export the winner list when you're done.
 
@@ -78,7 +78,7 @@ Everything lives in a local database at `%APPDATA%\com.brad.luckydraw`. Updating
 
 ### Starting fresh for a new event
 
-**Config → Factory reset** clears participants, prizes, results, planned rounds, draws and every setting. It asks for the admin password, which is `admin` unless your build sets its own. Export your results first if you need them.
+**Setup → Config → Factory reset** clears participants, prizes, results, planned rounds, draws and every setting. It asks for the admin password, which is `admin` unless your build sets its own. Export your results first if you need them.
 
 If a custom admin password is forgotten, there's no recovery inside the app. Uninstall Lucky Draw with **Delete the application data** ticked, then install it again.
 

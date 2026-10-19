@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { AppDataProvider, useAppData } from "./AppDataContext";
-import { SetupScreen } from "./screens/SetupScreen";
-import { ConfigScreen } from "./screens/ConfigScreen";
-import { DisplayScreen } from "./screens/DisplayScreen";
+import { SetupHubScreen } from "./screens/SetupHubScreen";
 import { DrawScreen } from "./screens/DrawScreen";
 import { AutoDrawScreen } from "./screens/AutoDrawScreen";
 import { ResultsScreen } from "./screens/ResultsScreen";
@@ -10,12 +8,10 @@ import { UpdateBanner, UpdateStatusFooter } from "../components/UpdateBanner";
 import { PresentControl } from "../components/PresentControl";
 import { useAppUpdater } from "../lib/updater";
 
-type Screen = "setup" | "config" | "display" | "draw" | "auto-draw" | "results";
+type Screen = "setup" | "draw" | "auto-draw" | "results";
 
 const NAV: { id: Screen; label: string }[] = [
   { id: "setup", label: "Setup" },
-  { id: "config", label: "Config" },
-  { id: "display", label: "Display Settings" },
   { id: "draw", label: "Manual Draw" },
   { id: "auto-draw", label: "Auto Draw" },
   { id: "results", label: "Results" },
@@ -83,9 +79,7 @@ function Shell() {
       )}
       <main className="min-w-0 flex-1 overflow-y-auto">
         <UpdateBanner updater={updater} />
-        {screen === "setup" && <SetupScreen />}
-        {screen === "config" && <ConfigScreen />}
-        {screen === "display" && <DisplayScreen />}
+        {screen === "setup" && <SetupHubScreen />}
         {screen === "draw" && <DrawScreen />}
         {screen === "auto-draw" && <AutoDrawScreen />}
         {screen === "results" && <ResultsScreen />}

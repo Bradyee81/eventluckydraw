@@ -35,7 +35,6 @@ export function DisplayScreen() {
 
   return (
     <div className="mx-auto max-w-2xl p-8">
-      <h1 className="mb-1 text-xl font-bold">Display Settings</h1>
       <p className="mb-6 text-white/60">
         Background chroma key color and the fixed text slots shown on the Output Window.
       </p>

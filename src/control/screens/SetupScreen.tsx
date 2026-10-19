@@ -333,7 +333,6 @@ export function SetupScreen() {
 
   return (
     <div className="mx-auto max-w-2xl p-8">
-      <h1 className="mb-1 text-xl font-bold">Setup</h1>
       <p className="mb-6 text-white/60">
         Optional: import a participant list to validate typed numbers and attach names to draw
         results. Skip this step to run Manual Mode with no validation.
