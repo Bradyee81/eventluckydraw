@@ -5,6 +5,8 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
+use crate::network::{hide_console, wifi_network};
+
 const BUZZER_APP_PORT: u16 = 3000;
 const SERIAL_BAUD: u32 = 115200;
 
@@ -56,8 +58,7 @@ pub fn detect_wifi_credentials() -> Result<WifiInfo, String> {
 }
 
 fn run_netsh(args: &[&str]) -> Result<String, String> {
-    let output = Command::new("netsh")
-        .args(args)
+    let output = hide_console(Command::new("netsh").args(args))
         .output()
         .map_err(|e| format!("failed to run netsh: {e}"))?;
     if !output.status.success() {
@@ -98,7 +99,12 @@ pub fn provision_buzzer(
     server_url: Option<String>,
 ) -> Result<String, String> {
     let server_url = server_url.unwrap_or_else(|| {
-        let ip = detect_local_ip().unwrap_or_else(|| "127.0.0.1".to_string());
+        // The buzzer joins the laptop's WiFi, so it must use the WiFi
+        // adapter's address; the routing guess is only a fallback.
+        let ip = wifi_network()
+            .ip
+            .or_else(detect_local_ip)
+            .unwrap_or_else(|| "127.0.0.1".to_string());
         format!("http://{ip}:{BUZZER_APP_PORT}/buzzer-event")
     });
 
@@ -140,7 +146,7 @@ pub fn provision_buzzer(
                     }
                     if line == "PROV_FAILED" {
                         return Err(
-                            "Buzzer couldn't join that WiFi network — check the password."
+                            "Buzzer couldn't join that WiFi network. Check the password, and that the router has 2.4 GHz WiFi (the buzzer can't use 5 GHz)."
                                 .to_string(),
                         );
                     }

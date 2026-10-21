@@ -2409,8 +2409,9 @@ checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
 name = "lucky-draw"
-version = "0.2.10"
+version = "0.2.11"
 dependencies = [
+ "base64 0.22.1",
  "serde",
  "serde_json",
  "serialport",

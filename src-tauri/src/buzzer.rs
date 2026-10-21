@@ -2,8 +2,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use serde::Deserialize;
-use tauri::{AppHandle, Emitter};
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tiny_http::{Response, Server};
 
 /// Port + path the ESP32 buzzer POSTs to over the venue's local WiFi (FR15).
@@ -14,20 +14,41 @@ const BUZZER_PORT: u16 = 3000;
 /// (heartbeat or button press) within this window, treat it as disconnected.
 const STALE_AFTER: Duration = Duration::from_secs(12);
 
+/// What Buzzer Setup needs to confirm a buzzer really reaches the app: a
+/// running count of messages (so it can wait for a *new* one after setup),
+/// who sent the last one, and whether we managed to listen at all.
+#[derive(Default, Clone, Serialize)]
+pub struct BuzzerContact {
+    listening: bool,
+    count: u64,
+    last_ip: Option<String>,
+}
+
+#[derive(Default)]
+pub struct BuzzerContactState(Mutex<BuzzerContact>);
+
+#[tauri::command]
+pub fn buzzer_contact(state: State<'_, BuzzerContactState>) -> BuzzerContact {
+    state.0.lock().unwrap().clone()
+}
+
 #[derive(Deserialize)]
 struct BuzzerEvent {
     event: String,
 }
 
 pub fn spawn(app_handle: AppHandle) {
+    app_handle.manage(BuzzerContactState::default());
     let server = match Server::http(("0.0.0.0", BUZZER_PORT)) {
         Ok(server) => server,
         Err(err) => {
+            // Usually another copy of Lucky Draw already holds the port.
             eprintln!("buzzer: failed to bind port {BUZZER_PORT}: {err}");
             return;
         }
     };
     println!("buzzer: listening on 0.0.0.0:{BUZZER_PORT}");
+    app_handle.state::<BuzzerContactState>().0.lock().unwrap().listening = true;
 
     let connected = Arc::new(AtomicBool::new(false));
     let last_seen: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
@@ -76,6 +97,12 @@ fn spawn_request_loop(
             let _ = request.as_reader().read_to_string(&mut body);
 
             *last_seen.lock().unwrap() = Some(Instant::now());
+            {
+                let state = app_handle.state::<BuzzerContactState>();
+                let mut contact = state.0.lock().unwrap();
+                contact.count += 1;
+                contact.last_ip = request.remote_addr().map(|a| a.ip().to_string());
+            }
             if !connected.swap(true, Ordering::SeqCst) {
                 emit_status(&app_handle, true);
             }

@@ -3,6 +3,7 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod admin;
 mod buzzer;
+mod network;
 mod password_hash;
 mod provisioning;
 
@@ -84,6 +85,10 @@ pub fn run() {
             provisioning::detect_wifi_credentials,
             provisioning::provision_buzzer,
             admin::verify_admin_password,
+            buzzer::buzzer_contact,
+            network::detect_wifi_network,
+            network::buzzer_firewall_allowed,
+            network::allow_buzzer_firewall,
         ])
         .setup(|app| {
             buzzer::spawn(app.handle().clone());
