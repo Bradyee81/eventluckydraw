@@ -6,8 +6,10 @@ import {
   buzzerFirewallAllowed,
   detectWifiCredentials,
   detectWifiNetwork,
+  installUsbDriver,
   listSerialPorts,
   provisionBuzzer,
+  usbDriverInstalled,
   type BuzzerContact,
   type WifiInfo,
   type WifiNetwork,
@@ -39,6 +41,9 @@ export function BuzzerSetupSection() {
   const [network, setNetwork] = useState<WifiNetwork | null>(null);
   const [firewallOk, setFirewallOk] = useState<boolean | null>(null);
   const [firewallBusy, setFirewallBusy] = useState(false);
+  const [driverOk, setDriverOk] = useState<boolean | null>(null);
+  const [driverBusy, setDriverBusy] = useState(false);
+  const [driverError, setDriverError] = useState<string | null>(null);
   const [status, setStatus] = useState<SetupStatus>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [contact, setContact] = useState<BuzzerContact | null>(null);
@@ -65,7 +70,29 @@ export function BuzzerSetupSection() {
   useEffect(() => {
     refreshPorts();
     refreshNetwork();
+    usbDriverInstalled()
+      .then(setDriverOk)
+      .catch(() => setDriverOk(null));
   }, [refreshPorts, refreshNetwork]);
+
+  const handleInstallDriver = async () => {
+    setDriverBusy(true);
+    setDriverError(null);
+    try {
+      const ok = await installUsbDriver();
+      setDriverOk(ok);
+      if (ok) {
+        // Windows takes a moment to assign a COM port to an already plugged-in buzzer.
+        setTimeout(refreshPorts, 2000);
+      } else {
+        setDriverError("Driver wasn't installed. Approve the admin prompt to install it.");
+      }
+    } catch (err) {
+      setDriverError(String(err));
+    } finally {
+      setDriverBusy(false);
+    }
+  };
 
   const handleAllowFirewall = async () => {
     setFirewallBusy(true);
@@ -173,6 +200,24 @@ export function BuzzerSetupSection() {
             (especially Public ones).
           </p>
         )}
+        <div className="flex flex-wrap items-center gap-2 text-white/60">
+          USB driver:
+          {driverOk === true && <span className="text-[#7CD992]">installed ✓</span>}
+          {driverOk === false && (
+            <>
+              <span className="text-[#F5C518]">not installed</span>
+              <button
+                onClick={handleInstallDriver}
+                disabled={driverBusy}
+                className="rounded border border-[#F5C518]/50 px-2 py-0.5 text-[#F5C518] hover:bg-[#F5C518]/10 disabled:opacity-50"
+              >
+                {driverBusy ? "Installing…" : "Install USB driver"}
+              </button>
+            </>
+          )}
+          {driverOk === null && <span className="text-white/40">checking…</span>}
+        </div>
+        {driverError && <p className="text-[#E27676]">{driverError}</p>}
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -192,7 +237,11 @@ export function BuzzerSetupSection() {
               ))}
             </select>
           ) : (
-            <p className="text-sm text-white/30">No USB devices found. Plug the buzzer in.</p>
+            <p className="text-sm text-white/30">
+              {driverOk === false
+                ? "No USB devices found. Install the USB driver above, then press Refresh."
+                : "No USB devices found. Plug the buzzer in."}
+            </p>
           )}
         </div>
         <button

@@ -6,6 +6,7 @@ mod buzzer;
 mod network;
 mod password_hash;
 mod provisioning;
+mod usb_driver;
 
 fn migrations() -> Vec<Migration> {
     vec![
@@ -89,6 +90,8 @@ pub fn run() {
             network::detect_wifi_network,
             network::buzzer_firewall_allowed,
             network::allow_buzzer_firewall,
+            usb_driver::usb_driver_installed,
+            usb_driver::install_usb_driver,
         ])
         .setup(|app| {
             buzzer::spawn(app.handle().clone());

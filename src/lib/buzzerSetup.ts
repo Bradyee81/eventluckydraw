@@ -57,3 +57,13 @@ export function allowBuzzerFirewall(): Promise<boolean> {
 export function buzzerContact(): Promise<BuzzerContact> {
   return invoke("buzzer_contact");
 }
+
+/** Whether the CP210x USB driver the buzzer board needs is installed. */
+export function usbDriverInstalled(): Promise<boolean> {
+  return invoke("usb_driver_installed");
+}
+
+/** Runs the bundled driver installer (one admin prompt); resolves to whether it's installed now. */
+export function installUsbDriver(): Promise<boolean> {
+  return invoke("install_usb_driver");
+}
