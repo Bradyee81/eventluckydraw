@@ -298,7 +298,7 @@ export function BuzzerSetupSection() {
 
       {message && (
         <p
-          className={`mt-3 text-sm ${
+          className={`mt-3 whitespace-pre-line text-sm ${
             status === "error" || status === "unreachable"
               ? "text-[#E27676]"
               : status === "success"

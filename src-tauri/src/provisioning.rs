@@ -86,6 +86,9 @@ struct SerialLines {
     serial: Box<dyn serialport::SerialPort>,
     pending: String,
     heard_bytes: bool,
+    /// Everything the buzzer printed, for diagnosing failures. The firmware
+    /// never echoes the WiFi password, so this is safe to show.
+    log: Vec<String>,
 }
 
 impl SerialLines {
@@ -99,6 +102,7 @@ impl SerialLines {
                 if line.is_empty() {
                     continue;
                 }
+                self.log.push(line.to_string());
                 return Ok(Some(line.to_string()));
             }
             if Instant::now() >= deadline {
@@ -114,6 +118,30 @@ impl SerialLines {
                 Err(e) => return Err(format!("lost connection to the buzzer: {e}")),
             }
         }
+    }
+}
+
+/// The buzzer started up but never answered the WiFi details. Its own output
+/// usually says why: a laptop USB port that can't supply enough power trips
+/// the ESP32's brownout detector when WiFi starts, and a crash reboots it —
+/// either way it restarts before reading what we sent.
+fn diagnose_no_reply(log: &[String]) -> String {
+    let said = |needle: &str| log.iter().any(|l| l.contains(needle));
+    let startups = log.iter().filter(|l| l.contains("Lucky Draw Buzzer")).count();
+
+    let reason = if said("Brownout") {
+        "The buzzer keeps restarting because it isn't getting enough power from USB. Try a different USB port on the laptop (not a hub), or a shorter or better USB cable."
+    } else if said("Guru Meditation") || said("panic") || startups >= 2 {
+        "The buzzer keeps restarting. Try a different USB port or cable. If it still happens, re-flash it with the flash tool."
+    } else {
+        "The buzzer started up but didn't take the WiFi details. It may have older firmware — re-flash it with the flash tool, then try again."
+    };
+
+    let tail: Vec<&str> = log.iter().rev().take(4).rev().map(String::as_str).collect();
+    if tail.is_empty() {
+        reason.to_string()
+    } else {
+        format!("{reason}\n\nBuzzer's last messages:\n{}", tail.join("\n"))
     }
 }
 
@@ -151,6 +179,7 @@ pub fn provision_buzzer(
         serial,
         pending: String::new(),
         heard_bytes: false,
+        log: Vec::new(),
     };
     // Seeing any of the firmware's own messages proves this is the buzzer.
     let mut heard_firmware = false;
@@ -212,7 +241,7 @@ pub fn provision_buzzer(
     if accepted {
         Err("Buzzer got the WiFi details but didn't finish joining in time. Check the password and that the router has 2.4 GHz WiFi, then try again.".to_string())
     } else if heard_firmware {
-        Err("Buzzer started up but didn't take the WiFi details. Unplug it, plug it back in, and try again.".to_string())
+        Err(diagnose_no_reply(&lines.log))
     } else {
         Err(format!(
             "No reply from a buzzer on {port}. If you have more than one USB port listed, unplug the buzzer and press Refresh to see which one disappears. If it's the right port, the buzzer may not have its firmware installed."
