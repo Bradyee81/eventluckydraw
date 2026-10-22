@@ -4,14 +4,13 @@ import {
   allowBuzzerFirewall,
   buzzerContact,
   buzzerFirewallAllowed,
-  detectWifiCredentials,
+  detectWifiSsid,
   detectWifiNetwork,
   installUsbDriver,
   listSerialPorts,
   provisionBuzzer,
   usbDriverInstalled,
   type BuzzerContact,
-  type WifiInfo,
   type WifiNetwork,
 } from "../lib/buzzerSetup";
 
@@ -37,7 +36,11 @@ export function BuzzerSetupSection() {
   const { buzzerConnected } = useAppData();
   const [ports, setPorts] = useState<string[]>([]);
   const [selectedPort, setSelectedPort] = useState("");
-  const [wifi, setWifi] = useState<WifiInfo | null>(null);
+  const [ssid, setSsid] = useState<string | null>(null);
+  // Typed by the operator. The app never reads saved WiFi passwords from
+  // Windows (antivirus treats that as password theft), and doesn't store it.
+  const [wifiPassword, setWifiPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [network, setNetwork] = useState<WifiNetwork | null>(null);
   const [firewallOk, setFirewallOk] = useState<boolean | null>(null);
   const [firewallBusy, setFirewallBusy] = useState(false);
@@ -56,9 +59,9 @@ export function BuzzerSetupSection() {
   }, []);
 
   const refreshNetwork = useCallback(() => {
-    detectWifiCredentials()
-      .then(setWifi)
-      .catch(() => setWifi(null));
+    detectWifiSsid()
+      .then(setSsid)
+      .catch(() => setSsid(null));
     detectWifiNetwork()
       .then(setNetwork)
       .catch(() => setNetwork(null));
@@ -108,15 +111,15 @@ export function BuzzerSetupSection() {
     setStatus("detecting");
     setMessage(null);
     try {
-      const creds = await detectWifiCredentials();
-      setWifi(creds);
+      const currentSsid = await detectWifiSsid();
+      setSsid(currentSsid);
       // Snapshot first, so only a message sent *after* setup counts as proof.
       const before = await buzzerContact();
       setStatus("sending");
       const joined = await provisionBuzzer({
         port: selectedPort,
-        ssid: creds.ssid,
-        password: creds.password,
+        ssid: currentSsid,
+        password: wifiPassword,
       });
 
       setStatus("verifying");
@@ -149,15 +152,14 @@ export function BuzzerSetupSection() {
   };
 
   const busy = status === "detecting" || status === "sending" || status === "verifying";
-  const isPublic = network?.category === "Public";
 
   return (
     <section className="mt-8 border-t border-white/10 pt-8">
       <label className="mb-2 block font-semibold">Buzzer setup</label>
       <p className="mb-4 max-w-lg text-xs text-white/40">
-        At the venue: connect this laptop to the router's WiFi (not by cable), plug the buzzer in
-        over USB, then press Connect. It sends the buzzer this network's details and checks the
-        buzzer can reach the app. No reflashing needed.
+        At the venue: connect this laptop to the router's WiFi (not by cable), type the WiFi
+        password below, plug the buzzer in over USB, then press Connect. It sends the buzzer this
+        network's details and checks the buzzer can reach the app. No reflashing needed.
       </p>
 
       <div className="mb-4 max-w-lg space-y-1.5 rounded-md border border-white/10 bg-white/[0.02] p-3 text-xs">
@@ -167,15 +169,14 @@ export function BuzzerSetupSection() {
         </div>
         <div className="text-white/60">
           WiFi:{" "}
-          {wifi ? (
+          {ssid ? (
             <span className="text-white">
-              {wifi.ssid}
+              {ssid}
               {network?.ip && ` · laptop address ${network.ip}`}
             </span>
           ) : (
             <span className="text-[#E27676]">not connected to WiFi</span>
           )}
-          {isPublic && <span className="text-[#F5C518]"> · Public network</span>}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-white/60">
           Firewall:
@@ -220,6 +221,33 @@ export function BuzzerSetupSection() {
         {driverError && <p className="text-[#E27676]">{driverError}</p>}
       </div>
 
+      <div className="mb-3 max-w-lg">
+        <label className="mb-1 block text-xs text-white/60">
+          WiFi password{ssid ? ` for "${ssid}"` : ""}
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type={showPassword ? "text" : "password"}
+            value={wifiPassword}
+            onChange={(e) => setWifiPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleConnect()}
+            placeholder="Router's WiFi password (blank if none)"
+            autoComplete="off"
+            className="w-64 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-[#F5C518]"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            className="text-xs text-white/50 hover:text-white"
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-white/40">
+          Sent only to the buzzer over USB. The app doesn't save it.
+        </p>
+      </div>
+
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label className="mb-1 block text-xs text-white/60">USB port</label>
@@ -259,7 +287,7 @@ export function BuzzerSetupSection() {
           className="rounded-md bg-[#F5C518] px-5 py-2 font-semibold text-[#10141F] disabled:opacity-50"
         >
           {status === "detecting"
-            ? "Reading WiFi…"
+            ? "Checking WiFi…"
             : status === "sending"
               ? "Sending to buzzer…"
               : status === "verifying"
@@ -300,10 +328,10 @@ export function BuzzerSetupSection() {
               press Connect again.
             </li>
           )}
-          {firewallOk !== false && isPublic && (
+          {firewallOk !== false && (
             <li>
-              Windows treats this WiFi as a Public network. If the dot stays grey, set it to
-              Private: Windows Settings → Network &amp; internet → WiFi → this network → Private.
+              If Windows treats this WiFi as a Public network, set it to Private: Windows Settings →
+              Network &amp; internet → WiFi → this network → Private.
             </li>
           )}
           <li>

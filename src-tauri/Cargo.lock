@@ -2409,9 +2409,8 @@ checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
 name = "lucky-draw"
-version = "0.2.12"
+version = "0.2.13"
 dependencies = [
- "base64 0.22.1",
  "serde",
  "serde_json",
  "serialport",
@@ -2425,6 +2424,7 @@ dependencies = [
  "tauri-plugin-sql",
  "tauri-plugin-updater",
  "tiny_http",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

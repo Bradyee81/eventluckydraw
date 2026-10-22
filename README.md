@@ -59,7 +59,7 @@ The app never updates by itself, so it won't restart during a show. Just don't p
 
 **Physical buzzer (optional)**
 - An ESP32 push-button buzzer starts the roll and reveal over the local WiFi.
-- Set-up is plug-and-play: connect the buzzer by USB, open **Setup → Config → Buzzer Setup**, press **Connect**. The app sends it the laptop's current WiFi and address, with no reflashing needed for a new venue.
+- Set-up is plug-and-play: connect the buzzer by USB, open **Setup → Config → Buzzer Setup**, type the venue WiFi password and press **Connect**. The app sends the buzzer the laptop's current WiFi name, that password and the laptop's address, then checks the buzzer can reach the app. No reflashing needed for a new venue.
 - The on-screen buttons always work too, so a disconnected buzzer never stops the show.
 
 ## Typical event flow

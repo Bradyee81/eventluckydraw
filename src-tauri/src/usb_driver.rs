@@ -1,15 +1,16 @@
 // The buzzer's CP2102 USB chip needs the Silicon Labs CP210x driver. The
 // installer adds it, but if that admin prompt was declined, Buzzer Setup can
-// run the same bundled script again.
+// install the same bundled driver.
 
 use std::process::Command;
 
 use tauri::{AppHandle, Manager};
 
 use crate::network::hide_console;
+use crate::win::run_elevated;
 
 /// Whether the CP210x driver is in the Windows driver store. Matching the
-/// .inf file name (not netsh/pnputil labels) keeps this locale-independent.
+/// .inf file name (not pnputil's labels) keeps this locale-independent.
 #[tauri::command]
 pub fn usb_driver_installed() -> bool {
     hide_console(Command::new("pnputil").arg("/enum-drivers"))
@@ -18,29 +19,26 @@ pub fn usb_driver_installed() -> bool {
         .unwrap_or(false)
 }
 
-/// Runs the bundled drivers/install-cp210x.ps1 (one admin prompt) and
-/// returns whether the driver is installed afterwards.
+/// Adds the bundled driver with pnputil (one admin prompt) and returns
+/// whether it's installed afterwards.
 #[tauri::command]
 pub async fn install_usb_driver(app: AppHandle) -> Result<bool, String> {
-    let script = app
+    let inf = app
         .path()
         .resource_dir()
         .map_err(|e| format!("couldn't find the app's files: {e}"))?
         .join("drivers")
-        .join("install-cp210x.ps1");
-    if !script.exists() {
-        return Err(format!("driver installer not found at {}", script.display()));
+        .join("cp210x")
+        .join("silabser.inf");
+    if !inf.exists() {
+        return Err(format!("driver files not found at {}", inf.display()));
     }
 
     tauri::async_runtime::spawn_blocking(move || {
-        // The script itself skips if the driver is already there, and waits
-        // for the elevated pnputil to finish.
-        let _ = hide_console(
-            Command::new("powershell")
-                .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"])
-                .arg(&script),
-        )
-        .output();
+        if usb_driver_installed() {
+            return Ok(true);
+        }
+        run_elevated("pnputil", &format!("/add-driver \"{}\" /install", inf.display()))?;
         Ok(usb_driver_installed())
     })
     .await

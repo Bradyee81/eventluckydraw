@@ -1,10 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export interface WifiInfo {
-  ssid: string;
-  password: string;
-}
-
 export function listSerialPorts(): Promise<string[]> {
   return invoke("list_serial_ports");
 }
@@ -13,8 +8,9 @@ export function detectLocalIp(): Promise<string | null> {
   return invoke("detect_local_ip");
 }
 
-export function detectWifiCredentials(): Promise<WifiInfo> {
-  return invoke("detect_wifi_credentials");
+/** Name of the WiFi the laptop is on. The password is typed by the operator, never read from Windows. */
+export function detectWifiSsid(): Promise<string> {
+  return invoke("detect_wifi_ssid");
 }
 
 export function provisionBuzzer(params: {
@@ -29,8 +25,6 @@ export function provisionBuzzer(params: {
 export interface WifiNetwork {
   /** The laptop's address on its WiFi adapter. */
   ip: string | null;
-  /** "Public", "Private" or "DomainAuthenticated". */
-  category: string | null;
 }
 
 export interface BuzzerContact {

@@ -3,18 +3,10 @@ use std::net::UdpSocket;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
-
 use crate::network::{hide_console, wifi_network};
 
 const BUZZER_APP_PORT: u16 = 3000;
 const SERIAL_BAUD: u32 = 115200;
-
-#[derive(Serialize)]
-pub struct WifiInfo {
-    ssid: String,
-    password: String,
-}
 
 #[tauri::command]
 pub fn list_serial_ports() -> Vec<String> {
@@ -34,27 +26,15 @@ pub fn detect_local_ip() -> Option<String> {
     socket.local_addr().ok().map(|addr| addr.ip().to_string())
 }
 
-/// Reads the currently connected WiFi's SSID and saved password from Windows
-/// via `netsh`. Requires the network to already be connected (and its
-/// profile saved, which Windows does by default) — that's the case we're
-/// designing for: the laptop connects to the venue router first, then we
-/// hand the same credentials to the buzzer.
+/// Name of the WiFi network the laptop is connected to, for the buzzer to
+/// join too. Deliberately does NOT read the saved WiFi password (`netsh ...
+/// key=clear`): that's a classic password-stealer action and antivirus
+/// quarantined the app for it. The operator types the password instead.
 #[tauri::command]
-pub fn detect_wifi_credentials() -> Result<WifiInfo, String> {
+pub fn detect_wifi_ssid() -> Result<String, String> {
     let interfaces_output = run_netsh(&["wlan", "show", "interfaces"])?;
-    let ssid = extract_field(&interfaces_output, "SSID")
-        .ok_or("No active WiFi connection found — connect to the venue WiFi first.")?;
-
-    let profile_output = run_netsh(&[
-        "wlan",
-        "show",
-        "profile",
-        &format!("name={ssid}"),
-        "key=clear",
-    ])?;
-    let password = extract_field(&profile_output, "Key Content").unwrap_or_default();
-
-    Ok(WifiInfo { ssid, password })
+    extract_field(&interfaces_output, "SSID")
+        .ok_or_else(|| "No active WiFi connection found. Connect to the venue WiFi first.".to_string())
 }
 
 fn run_netsh(args: &[&str]) -> Result<String, String> {

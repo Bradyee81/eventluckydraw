@@ -7,6 +7,7 @@ mod network;
 mod password_hash;
 mod provisioning;
 mod usb_driver;
+mod win;
 
 fn migrations() -> Vec<Migration> {
     vec![
@@ -83,7 +84,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             provisioning::list_serial_ports,
             provisioning::detect_local_ip,
-            provisioning::detect_wifi_credentials,
+            provisioning::detect_wifi_ssid,
             provisioning::provision_buzzer,
             admin::verify_admin_password,
             buzzer::buzzer_contact,
