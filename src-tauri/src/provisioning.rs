@@ -132,9 +132,9 @@ fn diagnose_no_reply(log: &[String]) -> String {
     let reason = if said("Brownout") {
         "The buzzer keeps restarting because it isn't getting enough power from USB. Try a different USB port on the laptop (not a hub), or a shorter or better USB cable."
     } else if said("Guru Meditation") || said("panic") || startups >= 2 {
-        "The buzzer keeps restarting. Try a different USB port or cable. If it still happens, re-flash it with the flash tool."
+        "The buzzer keeps restarting. Try a different USB port or cable. If it still happens, press Update buzzer firmware below."
     } else {
-        "The buzzer started up but didn't take the WiFi details. It may have older firmware — re-flash it with the flash tool, then try again."
+        "The buzzer started up but didn't take the WiFi details. It probably has older firmware — press Update buzzer firmware below, then Connect again."
     };
 
     let tail: Vec<&str> = log.iter().rev().take(4).rev().map(String::as_str).collect();
@@ -154,7 +154,7 @@ fn diagnose_no_reply(log: &[String]) -> String {
 /// wait for startup to finish ("WiFi connected"/"WiFi connection failed")
 /// before sending, rather than guessing a fixed delay.
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn provision_buzzer(
     port: String,
     ssid: String,
@@ -244,7 +244,7 @@ pub fn provision_buzzer(
         Err(diagnose_no_reply(&lines.log))
     } else {
         Err(format!(
-            "No reply from a buzzer on {port}. If you have more than one USB port listed, unplug the buzzer and press Refresh to see which one disappears. If it's the right port, the buzzer may not have its firmware installed."
+            "No reply from a buzzer on {port}. If you have more than one USB port listed, unplug the buzzer and press Refresh to see which one disappears. If it's the right port, the buzzer may not have its firmware yet — press Update buzzer firmware below."
         ))
     }
 }

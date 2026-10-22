@@ -6,6 +6,7 @@ import {
   buzzerFirewallAllowed,
   detectWifiSsid,
   detectWifiNetwork,
+  flashBuzzerFirmware,
   installUsbDriver,
   listSerialPorts,
   provisionBuzzer,
@@ -50,6 +51,9 @@ export function BuzzerSetupSection() {
   const [status, setStatus] = useState<SetupStatus>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [contact, setContact] = useState<BuzzerContact | null>(null);
+  // null = not flashing; otherwise 0–100.
+  const [flashPercent, setFlashPercent] = useState<number | null>(null);
+  const [flashResult, setFlashResult] = useState<{ ok: boolean; text: string } | null>(null);
 
   const refreshPorts = useCallback(() => {
     listSerialPorts().then((found) => {
@@ -151,7 +155,27 @@ export function BuzzerSetupSection() {
     }
   };
 
-  const busy = status === "detecting" || status === "sending" || status === "verifying";
+  const handleFlash = async () => {
+    if (!selectedPort) return;
+    setFlashPercent(0);
+    setFlashResult(null);
+    try {
+      await flashBuzzerFirmware(selectedPort, setFlashPercent);
+      // The old Connect error no longer applies.
+      setStatus("idle");
+      setMessage(null);
+      setFlashResult({ ok: true, text: "Buzzer firmware updated. Now press Connect." });
+    } catch (err) {
+      setFlashResult({ ok: false, text: String(err) });
+    } finally {
+      setFlashPercent(null);
+    }
+  };
+
+  const flashing = flashPercent !== null;
+  const busy = status === "detecting" || status === "sending" || status === "verifying" || flashing;
+  // provision_buzzer's errors name this button when old or missing firmware is the likely cause.
+  const suggestFlash = status === "error" && !!message?.includes("Update buzzer firmware");
 
   return (
     <section className="mt-8 border-t border-white/10 pt-8">
@@ -309,6 +333,44 @@ export function BuzzerSetupSection() {
           {message}
         </p>
       )}
+
+      <div className="mt-4 max-w-lg">
+        {flashing ? (
+          <div>
+            <p className="mb-1.5 text-sm text-white/70">
+              Updating buzzer firmware… {flashPercent}% — about a minute, don't unplug it.
+            </p>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-[#F5C518] transition-[width] duration-300"
+                style={{ width: `${flashPercent}%` }}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleFlash}
+              disabled={busy || !selectedPort}
+              className={
+                suggestFlash
+                  ? "rounded-md border border-[#F5C518]/60 px-3 py-1.5 text-sm text-[#F5C518] hover:bg-[#F5C518]/10 disabled:opacity-50"
+                  : "rounded-md border border-white/15 px-3 py-1.5 text-xs text-white/60 hover:bg-white/5 disabled:opacity-50"
+              }
+            >
+              Update buzzer firmware
+            </button>
+            {!suggestFlash && (
+              <span className="text-xs text-white/40">For a new buzzer, or if Connect says to.</span>
+            )}
+          </div>
+        )}
+        {flashResult && (
+          <p className={`mt-2 text-sm ${flashResult.ok ? "text-[#7CD992]" : "text-[#E27676]"}`}>
+            {flashResult.text}
+          </p>
+        )}
+      </div>
 
       {status === "unreachable" && (
         <ul className="mt-2 max-w-lg list-disc space-y-1.5 pl-5 text-xs text-white/70">

@@ -3,6 +3,7 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod admin;
 mod buzzer;
+mod firmware;
 mod network;
 mod password_hash;
 mod provisioning;
@@ -86,6 +87,7 @@ pub fn run() {
             provisioning::detect_local_ip,
             provisioning::detect_wifi_ssid,
             provisioning::provision_buzzer,
+            firmware::flash_buzzer_firmware,
             admin::verify_admin_password,
             buzzer::buzzer_contact,
             network::detect_wifi_network,

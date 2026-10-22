@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 export function listSerialPorts(): Promise<string[]> {
   return invoke("list_serial_ports");
@@ -20,6 +21,19 @@ export function provisionBuzzer(params: {
   serverUrl?: string;
 }): Promise<string> {
   return invoke("provision_buzzer", params);
+}
+
+/** Flashes the firmware built into the app onto the buzzer; onProgress gets 0–100. */
+export async function flashBuzzerFirmware(
+  port: string,
+  onProgress: (percent: number) => void
+): Promise<void> {
+  const unlisten = await listen<number>("buzzer-flash:progress", (e) => onProgress(e.payload));
+  try {
+    await invoke("flash_buzzer_firmware", { port });
+  } finally {
+    unlisten();
+  }
 }
 
 export interface WifiNetwork {

@@ -19,7 +19,7 @@ The installer includes everything the app needs:
 | Lucky Draw app | The control and output windows |
 | Microsoft WebView2 | The engine the app's screens run on. Only installed if the PC doesn't already have it (Windows 10/11 usually do). |
 | Silicon Labs CP210x USB driver | Lets the PC talk to the buzzer over USB. Windows asks for admin permission once; skip it if you don't use a buzzer. |
-| Buzzer flash tool | For loading firmware onto a new buzzer. Start menu → **Lucky Draw - Flash Buzzer**. |
+| Buzzer flash tool | For loading firmware onto a buzzer without opening the app. Start menu → **Lucky Draw - Flash Buzzer**. The app can also do this: **Buzzer Setup → Update buzzer firmware**. |
 | CSV templates | Participant and prize list examples. Start menu → **Lucky Draw - CSV Templates**. |
 
 > Windows may show a blue "Windows protected your PC" screen because the installer isn't code-signed. Click **More info → Run anyway**.
@@ -60,6 +60,7 @@ The app never updates by itself, so it won't restart during a show. Just don't p
 **Physical buzzer (optional)**
 - An ESP32 push-button buzzer starts the roll and reveal over the local WiFi.
 - Set-up is plug-and-play: connect the buzzer by USB, open **Setup → Config → Buzzer Setup**, type the venue WiFi password and press **Connect**. The app sends the buzzer the laptop's current WiFi name, that password and the laptop's address, then checks the buzzer can reach the app. No reflashing needed for a new venue.
+- A new buzzer, or one built before the WiFi set-up feature, needs its firmware updated first: plug it in and press **Update buzzer firmware** in Buzzer Setup (about a minute, don't unplug). Connect suggests this when the buzzer doesn't answer. The app and the flash tool both load the firmware in `ESP32 Buzzer/flash-tool/firmware/`, so after changing the firmware, copy the new `.bin` files there before building.
 - The on-screen buttons always work too, so a disconnected buzzer never stops the show.
 
 ## Typical event flow

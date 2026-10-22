@@ -1,9 +1,9 @@
 **What's new**
 
-- **Buzzer setup now says why a buzzer didn't take the WiFi details.** Instead of "started up but didn't take the WiFi details", the app now uses what the buzzer itself printed to tell you whether:
-  - it isn't getting enough power from the laptop's USB port (try another port, not a hub, or a better cable),
-  - it keeps restarting, or
-  - it probably has older firmware and needs re-flashing.
-- The buzzer's last few messages are shown under the error, so you can send them along if you need help.
+- **Update the buzzer's firmware from inside the app.** Buzzer setup has a new **Update buzzer firmware** button with a progress bar, so you don't need the separate flash tool. Use it for a new buzzer, or for one built before the WiFi set-up feature. It takes about a minute; don't unplug the buzzer while it runs.
+- **Connect points you to it.** If Connect finds the buzzer has old or missing firmware, the button is highlighted. Update the firmware, then press Connect again.
+- **The window no longer freezes while connecting.** It stays responsive during Connect, which can take up to 30 seconds.
+
+The Start menu flash tool (**Lucky Draw - Flash Buzzer**) is still included.
 
 **New install:** download the file ending in `_x64-setup.exe` below and run it. Already have Lucky Draw 0.2.0 or later? Open it and press **Update now**.
