@@ -289,7 +289,7 @@ export function BuzzerSetupSection() {
           {status === "detecting"
             ? "Checking WiFi…"
             : status === "sending"
-              ? "Sending to buzzer…"
+              ? "Sending to buzzer (up to 30s)…"
               : status === "verifying"
                 ? "Checking…"
                 : "Connect"}

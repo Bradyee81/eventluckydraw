@@ -7,12 +7,26 @@ use crate::network::{hide_console, wifi_network};
 
 const BUZZER_APP_PORT: u16 = 3000;
 const SERIAL_BAUD: u32 = 115200;
+const CP210X_VID: u16 = 0x10C4;
 
+/// Serial ports, likeliest buzzer first: CP210x (the buzzer's USB chip), then
+/// other USB serial, then anything else. Bluetooth serial ports are dropped —
+/// laptops often have a couple, and picking one by accident looked exactly
+/// like a dead buzzer.
 #[tauri::command]
 pub fn list_serial_ports() -> Vec<String> {
-    serialport::available_ports()
-        .map(|ports| ports.into_iter().map(|p| p.port_name).collect())
+    use serialport::SerialPortType;
+    let mut ports: Vec<_> = serialport::available_ports()
         .unwrap_or_default()
+        .into_iter()
+        .filter(|p| !matches!(p.port_type, SerialPortType::BluetoothPort))
+        .collect();
+    ports.sort_by_key(|p| match &p.port_type {
+        SerialPortType::UsbPort(usb) if usb.vid == CP210X_VID => 0,
+        SerialPortType::UsbPort(_) => 1,
+        _ => 2,
+    });
+    ports.into_iter().map(|p| p.port_name).collect()
 }
 
 /// This machine's LAN IP, used to prefill the buzzer's server URL. Uses the
@@ -67,10 +81,51 @@ fn extract_field(text: &str, label: &str) -> Option<String> {
     None
 }
 
+/// Line-at-a-time reader over the buzzer's serial output.
+struct SerialLines {
+    serial: Box<dyn serialport::SerialPort>,
+    pending: String,
+    heard_bytes: bool,
+}
+
+impl SerialLines {
+    /// Next non-empty line, or None once `deadline` passes.
+    fn next_line(&mut self, deadline: Instant) -> Result<Option<String>, String> {
+        let mut buf = [0u8; 256];
+        loop {
+            if let Some(pos) = self.pending.find('\n') {
+                let line: String = self.pending.drain(..=pos).collect();
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                return Ok(Some(line.to_string()));
+            }
+            if Instant::now() >= deadline {
+                return Ok(None);
+            }
+            match self.serial.read(&mut buf) {
+                Ok(0) => {}
+                Ok(n) => {
+                    self.heard_bytes = true;
+                    self.pending.push_str(&String::from_utf8_lossy(&buf[..n]));
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {}
+                Err(e) => return Err(format!("lost connection to the buzzer: {e}")),
+            }
+        }
+    }
+}
+
 /// Pushes WiFi + server credentials to the buzzer over USB serial and waits
-/// for it to report back whether it connected. The ESP32 likely resets when
-/// the port opens (CP2102 auto-reset via DTR), so this waits out its boot
-/// sequence before writing anything.
+/// for it to report back whether it connected.
+///
+/// Opening the port usually resets the ESP32 (CP2102 auto-reset), and its
+/// startup then spends up to ~10s retrying the WiFi it remembers before it
+/// reads USB at all. At a new venue that remembered WiFi isn't there, so we
+/// wait for startup to finish ("WiFi connected"/"WiFi connection failed")
+/// before sending, rather than guessing a fixed delay.
+
 #[tauri::command]
 pub fn provision_buzzer(
     port: String,
@@ -88,57 +143,79 @@ pub fn provision_buzzer(
         format!("http://{ip}:{BUZZER_APP_PORT}/buzzer-event")
     });
 
-    let mut serial = serialport::new(&port, SERIAL_BAUD)
-        .timeout(Duration::from_millis(500))
+    let serial = serialport::new(&port, SERIAL_BAUD)
+        .timeout(Duration::from_millis(200))
         .open()
         .map_err(|e| format!("couldn't open {port}: {e}"))?;
+    let mut lines = SerialLines {
+        serial,
+        pending: String::new(),
+        heard_bytes: false,
+    };
+    // Seeing any of the firmware's own messages proves this is the buzzer.
+    let mut heard_firmware = false;
 
-    // Let the board finish its post-reset boot sequence before we write.
-    std::thread::sleep(Duration::from_millis(2000));
+    // Wait out startup. Silence for 3s means it didn't reset and is
+    // already running, so it's listening now.
+    let opened = Instant::now();
+    let startup_deadline = opened + Duration::from_secs(16);
+    loop {
+        let quiet_deadline = if lines.heard_bytes {
+            startup_deadline
+        } else {
+            opened + Duration::from_secs(3)
+        };
+        match lines.next_line(quiet_deadline.min(startup_deadline))? {
+            Some(line) => {
+                if line.contains("Lucky Draw Buzzer") || line.starts_with("Connecting to WiFi") {
+                    heard_firmware = true;
+                }
+                if line.starts_with("WiFi connected") || line.starts_with("WiFi connection failed") {
+                    heard_firmware = true;
+                    break;
+                }
+            }
+            None if Instant::now() >= startup_deadline || !lines.heard_bytes => break,
+            None => {}
+        }
+    }
 
     let payload = serde_json::json!({
         "ssid": ssid,
         "password": password,
         "server_url": server_url,
     });
-    let line = format!("{}\n", payload);
-    serial
-        .write_all(line.as_bytes())
+    lines
+        .serial
+        .write_all(format!("{payload}\n").as_bytes())
         .map_err(|e| format!("failed writing to {port}: {e}"))?;
 
-    let deadline = Instant::now() + Duration::from_secs(15);
-    let mut buf = [0u8; 256];
-    let mut pending = String::new();
-
-    while Instant::now() < deadline {
-        match serial.read(&mut buf) {
-            Ok(0) => continue,
-            Ok(n) => {
-                pending.push_str(&String::from_utf8_lossy(&buf[..n]));
-                while let Some(pos) = pending.find('\n') {
-                    let line: String = pending.drain(..=pos).collect();
-                    let line = line.trim();
-                    if line.is_empty() {
-                        continue;
-                    }
-                    if let Some(ip) = line.strip_prefix("PROV_CONNECTED:") {
-                        return Ok(format!("Buzzer connected — {ip}"));
-                    }
-                    if line == "PROV_FAILED" {
-                        return Err(
-                            "Buzzer couldn't join that WiFi network. Check the password, and that the router has 2.4 GHz WiFi (the buzzer can't use 5 GHz)."
-                                .to_string(),
-                        );
-                    }
-                    if let Some(reason) = line.strip_prefix("PROV_ERROR:") {
-                        return Err(format!("Buzzer rejected the request: {reason}"));
-                    }
-                }
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::TimedOut => continue,
-            Err(e) => return Err(format!("lost connection to {port}: {e}")),
+    // PROV_OK comes straight back; joining WiFi then takes up to ~10s more.
+    let mut deadline = Instant::now() + Duration::from_secs(15);
+    let mut accepted = false;
+    while let Some(line) = lines.next_line(deadline)? {
+        if line == "PROV_OK" {
+            accepted = true;
+            deadline = Instant::now() + Duration::from_secs(20);
+        } else if let Some(ip) = line.strip_prefix("PROV_CONNECTED:") {
+            return Ok(format!("Buzzer connected — {ip}"));
+        } else if line == "PROV_FAILED" {
+            return Err(
+                "Buzzer couldn't join that WiFi network. Check the password, and that the router has 2.4 GHz WiFi (the buzzer can't use 5 GHz)."
+                    .to_string(),
+            );
+        } else if let Some(reason) = line.strip_prefix("PROV_ERROR:") {
+            return Err(format!("Buzzer rejected the request: {reason}"));
         }
     }
 
-    Err("Buzzer didn't respond in time — check the USB connection and try again.".to_string())
+    if accepted {
+        Err("Buzzer got the WiFi details but didn't finish joining in time. Check the password and that the router has 2.4 GHz WiFi, then try again.".to_string())
+    } else if heard_firmware {
+        Err("Buzzer started up but didn't take the WiFi details. Unplug it, plug it back in, and try again.".to_string())
+    } else {
+        Err(format!(
+            "No reply from a buzzer on {port}. If you have more than one USB port listed, unplug the buzzer and press Refresh to see which one disappears. If it's the right port, the buzzer may not have its firmware installed."
+        ))
+    }
 }
