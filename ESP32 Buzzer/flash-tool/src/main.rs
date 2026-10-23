@@ -16,13 +16,18 @@ const PARTITIONS: &[u8] = include_bytes!("../firmware/partitions.bin");
 const BOOT_APP0: &[u8] = include_bytes!("../firmware/boot_app0.bin");
 const APP: &[u8] = include_bytes!("../firmware/firmware.bin");
 
+const LABELS: [&str; 4] = ["bootloader", "partition table", "boot selector", "app"];
+
+/// Prints one line per segment; espflash calls `init` as each one starts.
 struct SimpleProgress {
-    label: String,
+    segment: usize,
 }
 
 impl ProgressCallbacks for SimpleProgress {
-    fn init(&mut self, addr: u32, total: usize) {
-        print!("  writing {} ({} bytes @ 0x{addr:x})... ", self.label, total);
+    fn init(&mut self, addr: u32, _total: usize) {
+        let label = LABELS.get(self.segment).copied().unwrap_or("data");
+        self.segment += 1;
+        print!("  writing {label} @ 0x{addr:x}... ");
         let _ = io::stdout().flush();
     }
     fn update(&mut self, _current: usize) {}
@@ -129,14 +134,13 @@ fn main() {
         RomSegment { addr: 0xe000, data: BOOT_APP0.into() },
         RomSegment { addr: 0x10000, data: APP.into() },
     ];
-    let labels = ["bootloader", "partition table", "boot selector", "app"];
-
-    for (segment, label) in segments.into_iter().zip(labels) {
-        let mut progress = SimpleProgress { label: label.to_string() };
-        if let Err(e) = flasher.write_bin_to_flash(segment.addr, &segment.data, Some(&mut progress)) {
-            println!("Flashing failed while writing {label}: {e}");
-            pause_and_exit(1);
-        }
+    // One call for all segments: espflash resets the chip at the end of each
+    // write call, so writing them one at a time talked to a rebooting chip
+    // from the second segment on ("Communication error while flashing").
+    let mut progress = SimpleProgress { segment: 0 };
+    if let Err(e) = flasher.write_bins_to_flash(&segments, Some(&mut progress)) {
+        println!("Flashing failed: {e}");
+        pause_and_exit(1);
     }
 
     println!();

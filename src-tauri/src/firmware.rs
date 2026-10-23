@@ -4,6 +4,7 @@
 // to the UI instead of printed.
 
 use espflash::connection::reset::{ResetAfterOperation, ResetBeforeOperation};
+use espflash::elf::RomSegment;
 use espflash::flasher::{Flasher, ProgressCallbacks};
 use serialport::SerialPortType;
 use tauri::{AppHandle, Emitter};
@@ -23,9 +24,12 @@ const SEGMENTS: [(u32, &[u8]); 4] = [
 const PROGRESS_EVENT: &str = "buzzer-flash:progress";
 
 /// Reports overall progress as a percentage, weighting each segment by its
-/// size (espflash reports chunks within the current segment only).
+/// size (espflash reports chunks within the current segment only, calling
+/// `init` as each segment in SEGMENTS order starts).
 struct UiProgress<'a> {
     app: &'a AppHandle,
+    /// Index into SEGMENTS of the segment being written; None before the first.
+    segment: Option<usize>,
     done_before: usize,
     segment_len: usize,
     total_len: usize,
@@ -46,6 +50,10 @@ impl UiProgress<'_> {
 
 impl ProgressCallbacks for UiProgress<'_> {
     fn init(&mut self, _addr: u32, total: usize) {
+        let index = self.segment.map_or(0, |i| i + 1);
+        self.segment = Some(index);
+        self.done_before = SEGMENTS[..index.min(SEGMENTS.len())].iter().map(|(_, d)| d.len()).sum();
+        self.segment_len = SEGMENTS.get(index).map_or(0, |(_, d)| d.len());
         self.chunks = total.max(1);
     }
     fn update(&mut self, current: usize) {
@@ -94,22 +102,25 @@ fn flash(app: &AppHandle, port: &str) -> Result<(), String> {
         format!("Couldn't start flashing the buzzer ({e}). Unplug it, plug it back in, and try again.")
     })?;
 
-    let total_len: usize = SEGMENTS.iter().map(|(_, data)| data.len()).sum();
-    let mut done_before = 0;
-    for (addr, data) in SEGMENTS {
-        let mut progress = UiProgress {
-            app,
-            done_before,
-            segment_len: data.len(),
-            total_len,
-            chunks: 1,
-            last_percent: u8::MAX,
-        };
-        flasher
-            .write_bin_to_flash(addr, data, Some(&mut progress))
-            .map_err(|e| format!("Flashing failed partway ({e}). Don't unplug during the update — try again."))?;
-        done_before += data.len();
-    }
+    // One call for all segments: espflash resets the chip at the end of each
+    // write call, so writing them one at a time talked to a rebooting chip
+    // from the second segment on ("Communication error while flashing").
+    let segments: Vec<RomSegment> = SEGMENTS
+        .iter()
+        .map(|&(addr, data)| RomSegment { addr, data: data.into() })
+        .collect();
+    let mut progress = UiProgress {
+        app,
+        segment: None,
+        done_before: 0,
+        segment_len: 0,
+        total_len: SEGMENTS.iter().map(|(_, data)| data.len()).sum(),
+        chunks: 1,
+        last_percent: u8::MAX,
+    };
+    flasher
+        .write_bins_to_flash(&segments, Some(&mut progress))
+        .map_err(|e| format!("Flashing failed partway ({e}). Don't unplug during the update — try again."))?;
 
     Ok(())
 }
