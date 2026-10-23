@@ -51,21 +51,22 @@ export function DrawScreen() {
   const [skipValidation, setSkipValidationState] = useState(loadSkipValidation);
   const [buzzed, setBuzzed] = useState(false);
   const buzzFlashTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // What a buzzer press does right now; reassigned every render (below) so
+  // the listener, registered once, always sees current state.
+  const buzzerAction = useRef<() => void>(() => {});
 
   useEffect(() => {
     const unlisten = onEvent("buzzer:pressed", () => {
       setBuzzed(true);
       if (buzzFlashTimeout.current) clearTimeout(buzzFlashTimeout.current);
       buzzFlashTimeout.current = setTimeout(() => setBuzzed(false), BUZZ_FLASH_MS);
-      if (!confirmedNumber) {
-        emitEvent("draw:roll", {});
-      }
+      buzzerAction.current();
     });
     return () => {
       unlisten.then((fn) => fn());
       if (buzzFlashTimeout.current) clearTimeout(buzzFlashTimeout.current);
     };
-  }, [confirmedNumber]);
+  }, []);
 
   const refreshRecent = useCallback(() => {
     listDrawRecords().then((records) => setRecentRecords(records.slice(0, 8)));
@@ -250,6 +251,16 @@ export function DrawScreen() {
     currentSection,
     refreshRecent,
   ]);
+
+  // The buzzer steps through a draw like the Enter key: once the number is
+  // typed it logs the winner, after that it starts the next draw. Before any
+  // digit is typed it rolls; mid-entry it does nothing, so a stray press
+  // can't disturb a half-typed number.
+  buzzerAction.current = () => {
+    if (confirmedNumber) startNewDraw();
+    else if (isComplete) confirm();
+    else if (history.length === 0) emitEvent("draw:roll", {});
+  };
 
   const toggleShowResult = () => {
     if (resultShown) {
