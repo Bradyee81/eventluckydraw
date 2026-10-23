@@ -17,6 +17,8 @@ function nextEmptyIndex(digits: (number | null)[], from: number): number {
 }
 
 const BUZZ_FLASH_MS = 1500;
+// Longer, since the confirmed panel is already gone by the time it shows.
+const LOGGED_FLASH_MS = 4000;
 
 const SKIP_VALIDATION_KEY = "manualDraw.skipValidation";
 
@@ -49,24 +51,28 @@ export function DrawScreen() {
   const [sectionSequence, setSectionSequence] = useState<number | null>(null);
   const [resultShown, setResultShown] = useState(false);
   const [skipValidation, setSkipValidationState] = useState(loadSkipValidation);
-  const [buzzed, setBuzzed] = useState(false);
+  const [buzzFlash, setBuzzFlash] = useState<string | null>(null);
   const buzzFlashTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flashBuzz = useCallback((text: string, ms: number) => {
+    setBuzzFlash(text);
+    if (buzzFlashTimeout.current) clearTimeout(buzzFlashTimeout.current);
+    buzzFlashTimeout.current = setTimeout(() => setBuzzFlash(null), ms);
+  }, []);
   // What a buzzer press does right now; reassigned every render (below) so
   // the listener, registered once, always sees current state.
   const buzzerAction = useRef<() => void>(() => {});
 
   useEffect(() => {
     const unlisten = onEvent("buzzer:pressed", () => {
-      setBuzzed(true);
-      if (buzzFlashTimeout.current) clearTimeout(buzzFlashTimeout.current);
-      buzzFlashTimeout.current = setTimeout(() => setBuzzed(false), BUZZ_FLASH_MS);
+      flashBuzz("🔔 Buzzed in!", BUZZ_FLASH_MS);
       buzzerAction.current();
     });
     return () => {
       unlisten.then((fn) => fn());
       if (buzzFlashTimeout.current) clearTimeout(buzzFlashTimeout.current);
     };
-  }, []);
+  }, [flashBuzz]);
 
   const refreshRecent = useCallback(() => {
     listDrawRecords().then((records) => setRecentRecords(records.slice(0, 8)));
@@ -220,9 +226,10 @@ export function DrawScreen() {
     emitEvent("draw:reset", {}).then(() => emitEvent("draw:roll", {}));
   }, [slotCount]);
 
-  const confirm = useCallback(async () => {
-    if (!isComplete || confirmedNumber) return;
-    if (hasList && !skipValidation && notFound) return;
+  /** Logs the typed number; resolves to the number, or null if it wasn't logged. */
+  const confirm = useCallback(async (): Promise<string | null> => {
+    if (!isComplete || confirmedNumber) return null;
+    if (hasList && !skipValidation && notFound) return null;
     const number = digits.join("");
     const sequence = await insertDrawRecord({
       number,
@@ -239,6 +246,7 @@ export function DrawScreen() {
     emitEvent("draw:confirmed", { number, participantName: match?.name ?? null });
     setSaveMsg("Draw logged.");
     refreshRecent();
+    return number;
   }, [
     isComplete,
     confirmedNumber,
@@ -252,14 +260,23 @@ export function DrawScreen() {
     refreshRecent,
   ]);
 
-  // The buzzer steps through a draw like the Enter key: once the number is
-  // typed it logs the winner, after that it starts the next draw. Before any
-  // digit is typed it rolls; mid-entry it does nothing, so a stray press
-  // can't disturb a half-typed number.
+  // One press per winner: once the number is typed, the buzzer logs it and
+  // goes straight on to rolling for the next one. A number the list check
+  // rejects isn't logged and doesn't roll on. Before any digit is typed it
+  // rolls; mid-entry it does nothing, so a stray press can't disturb a
+  // half-typed number. If Confirm was clicked instead, it starts the next draw.
   buzzerAction.current = () => {
-    if (confirmedNumber) startNewDraw();
-    else if (isComplete) confirm();
-    else if (history.length === 0) emitEvent("draw:roll", {});
+    if (confirmedNumber) {
+      startNewDraw();
+    } else if (isComplete) {
+      confirm().then((logged) => {
+        if (!logged) return;
+        startNewDraw();
+        flashBuzz(`✓ Logged ${logged} — rolling for next winner`, LOGGED_FLASH_MS);
+      });
+    } else if (history.length === 0) {
+      emitEvent("draw:roll", {});
+    }
   };
 
   const toggleShowResult = () => {
@@ -331,9 +348,9 @@ export function DrawScreen() {
           </div>
         </div>
 
-        {buzzed && (
+        {buzzFlash && (
           <div className="mb-4 inline-block rounded-md border border-[#F5C518]/40 bg-[#F5C518]/10 px-3 py-1.5 text-sm font-semibold text-[#F5C518]">
-            🔔 Buzzed in!
+            {buzzFlash}
           </div>
         )}
 
