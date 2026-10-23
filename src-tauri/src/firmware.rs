@@ -23,6 +23,21 @@ const SEGMENTS: [(u32, &[u8]); 4] = [
 
 const PROGRESS_EVENT: &str = "buzzer-flash:progress";
 
+/// Version of the firmware built into the app, read from the tag the firmware
+/// embeds ("LDFW_VERSION=<n>", see FIRMWARE_VERSION_TAG in main.cpp), so it
+/// can never drift from the bundled .bin.
+#[tauri::command]
+pub fn bundled_firmware_version() -> Option<u32> {
+    const TAG: &[u8] = b"LDFW_VERSION=";
+    let start = APP.windows(TAG.len()).position(|w| w == TAG)? + TAG.len();
+    let digits: String = APP[start..]
+        .iter()
+        .take_while(|b| b.is_ascii_digit())
+        .map(|&b| b as char)
+        .collect();
+    digits.parse().ok()
+}
+
 /// Reports overall progress as a percentage, weighting each segment by its
 /// size (espflash reports chunks within the current segment only, calling
 /// `init` as each segment in SEGMENTS order starts).

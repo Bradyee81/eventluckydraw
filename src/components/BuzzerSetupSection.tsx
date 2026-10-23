@@ -4,6 +4,7 @@ import {
   allowBuzzerFirewall,
   buzzerContact,
   buzzerFirewallAllowed,
+  bundledFirmwareVersion,
   detectWifiSsid,
   detectWifiNetwork,
   flashBuzzerFirmware,
@@ -27,6 +28,17 @@ type SetupStatus =
 // The buzzer sends a heartbeat every 5s, so a working setup is heard well within this.
 const VERIFY_TIMEOUT_MS = 15_000;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+// Must match patternFor() in the buzzer firmware (ESP32 Buzzer/src/main.cpp).
+const LIGHT_STATES: [color: string, label: string, meaning: string][] = [
+  ["#7CD992", "Green, steady", "connected to Lucky Draw, ready"],
+  ["#F5C518", "Yellow, slow blink", "on the WiFi, looking for Lucky Draw. Open the app on a laptop on the same WiFi."],
+  ["#5B8DEF", "Blue, fast blink", "joining the WiFi"],
+  ["#E27676", "Red, steady", "can't join the WiFi. Check the router is on, or press Connect again with the right password."],
+  ["#E27676", "Red, slow blink", "no WiFi saved yet. Plug it in and press Connect."],
+  ["#B57BEE", "Purple, fast blink", "receiving new WiFi details from Connect"],
+  ["#FFFFFF", "White flash", "button pressed"],
+];
 
 /**
  * Venue routine: laptop joins the router's WiFi, buzzer plugs in over USB,
@@ -54,6 +66,7 @@ export function BuzzerSetupSection() {
   // null = not flashing; otherwise 0–100.
   const [flashPercent, setFlashPercent] = useState<number | null>(null);
   const [flashResult, setFlashResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [bundledFirmware, setBundledFirmware] = useState<number | null>(null);
 
   const refreshPorts = useCallback(() => {
     listSerialPorts().then((found) => {
@@ -80,7 +93,19 @@ export function BuzzerSetupSection() {
     usbDriverInstalled()
       .then(setDriverOk)
       .catch(() => setDriverOk(null));
+    bundledFirmwareVersion()
+      .then(setBundledFirmware)
+      .catch(() => setBundledFirmware(null));
   }, [refreshPorts, refreshNetwork]);
+
+  // The buzzer reports its firmware version with every message, so keep this
+  // current while the screen is open (it's a cheap in-memory read).
+  useEffect(() => {
+    const poll = () => buzzerContact().then(setContact).catch(() => {});
+    poll();
+    const timer = setInterval(poll, 2000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleInstallDriver = async () => {
     setDriverBusy(true);
@@ -174,8 +199,16 @@ export function BuzzerSetupSection() {
 
   const flashing = flashPercent !== null;
   const busy = status === "detecting" || status === "sending" || status === "verifying" || flashing;
+  // A connected buzzer is out of date when it reports an older version, or
+  // none at all (firmware from before versions existed).
+  const firmwareOutdated =
+    buzzerConnected &&
+    !!contact &&
+    (contact.firmware_unversioned ||
+      (contact.firmware !== null && bundledFirmware !== null && contact.firmware < bundledFirmware));
   // provision_buzzer's errors name this button when old or missing firmware is the likely cause.
-  const suggestFlash = status === "error" && !!message?.includes("Update buzzer firmware");
+  const suggestFlash =
+    firmwareOutdated || (status === "error" && !!message?.includes("Update buzzer firmware"));
 
   // Pick up a buzzer being plugged in or out without pressing Refresh.
   // Paused while busy so the port can't change under a Connect or flash.
@@ -208,6 +241,20 @@ export function BuzzerSetupSection() {
             </span>
           ) : (
             <span className="text-[#E27676]">not connected to WiFi</span>
+          )}
+        </div>
+        <div className="text-white/60">
+          Buzzer firmware:{" "}
+          {!buzzerConnected || !contact || (contact.firmware === null && !contact.firmware_unversioned) ? (
+            <span className="text-white/40">shows once the buzzer is connected</span>
+          ) : firmwareOutdated ? (
+            <span className="text-[#F5C518]">
+              {contact.firmware !== null ? `v${contact.firmware}` : "old version"} — update available
+              {bundledFirmware !== null && ` (v${bundledFirmware})`}. Plug the buzzer in by USB and
+              press Update buzzer firmware below.
+            </span>
+          ) : (
+            <span className="text-[#7CD992]">v{contact.firmware} ✓ up to date</span>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-white/60">
@@ -252,6 +299,26 @@ export function BuzzerSetupSection() {
         </div>
         {driverError && <p className="text-[#E27676]">{driverError}</p>}
       </div>
+
+      <details className="mb-4 max-w-lg text-xs text-white/60">
+        <summary className="cursor-pointer text-white/50 hover:text-white/80">
+          What the buzzer's light means
+        </summary>
+        <ul className="mt-2 space-y-1 pl-1">
+          {LIGHT_STATES.map(([color, label, meaning]) => (
+            <li key={label} className="flex items-start gap-2">
+              <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+              <span>
+                <span className="text-white/80">{label}</span> — {meaning}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-white/40">
+          Buzzers without the coloured light show the same blinking on the board's small LED.
+          Firmware older than v2 has no light.
+        </p>
+      </details>
 
       <div className="mb-3 max-w-lg">
         <label className="mb-1 block text-xs text-white/60">

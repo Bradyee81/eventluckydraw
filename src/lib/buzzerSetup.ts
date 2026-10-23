@@ -47,6 +47,15 @@ export interface BuzzerContact {
   /** Messages received from a buzzer since the app started. */
   count: number;
   last_ip: string | null;
+  /** Firmware version from the buzzer's last message (v2+); null before any message or on old firmware. */
+  firmware: number | null;
+  /** True when the last message came from firmware too old to report a version. */
+  firmware_unversioned: boolean;
+}
+
+/** Version of the buzzer firmware built into this copy of the app. */
+export function bundledFirmwareVersion(): Promise<number | null> {
+  return invoke("bundled_firmware_version");
 }
 
 export function detectWifiNetwork(): Promise<WifiNetwork> {

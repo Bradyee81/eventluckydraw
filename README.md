@@ -60,6 +60,8 @@ The app never updates by itself, so it won't restart during a show. Just don't p
 **Physical buzzer (optional)**
 - An ESP32 push-button buzzer starts the roll and reveal over the local WiFi.
 - Set-up is plug-and-play: connect the buzzer by USB, open **Setup → Config → Buzzer Setup**, type the venue WiFi password and press **Connect**. The app sends the buzzer the laptop's current WiFi name, that password and the laptop's address, then checks the buzzer can reach the app. No reflashing needed for a new venue.
+- With firmware v2 or later, the buzzer finds the laptop by itself: the app announces itself on the WiFi (UDP port 3001), so switching laptops or the laptop getting a new address needs no re-setup. Connect is only needed for a new WiFi network or password.
+- Buzzer Setup shows the buzzer's firmware version and highlights **Update buzzer firmware** when it's out of date. Its status light is explained under **What the buzzer's light means** there. Wiring for the button and the RGB status light: [ESP32 Buzzer/WIRING.md](ESP32%20Buzzer/WIRING.md).
 - A new buzzer, or one built before the WiFi set-up feature, needs its firmware updated first: plug it in and press **Update buzzer firmware** in Buzzer Setup (about a minute, don't unplug). Connect suggests this when the buzzer doesn't answer. The app and the flash tool both load the firmware in `ESP32 Buzzer/flash-tool/firmware/`, so after changing the firmware, copy the new `.bin` files there before building.
 - The on-screen buttons always work too, so a disconnected buzzer never stops the show.
 

@@ -88,6 +88,7 @@ pub fn run() {
             provisioning::detect_wifi_ssid,
             provisioning::provision_buzzer,
             firmware::flash_buzzer_firmware,
+            firmware::bundled_firmware_version,
             admin::verify_admin_password,
             buzzer::buzzer_contact,
             network::detect_wifi_network,
