@@ -1,9 +1,7 @@
 **What's new**
 
-- **Update the buzzer's firmware from inside the app.** Buzzer setup has a new **Update buzzer firmware** button with a progress bar, so you don't need the separate flash tool. Use it for a new buzzer, or for one built before the WiFi set-up feature. It takes about a minute; don't unplug the buzzer while it runs.
-- **Connect points you to it.** If Connect finds the buzzer has old or missing firmware, the button is highlighted. Update the firmware, then press Connect again.
-- **The window no longer freezes while connecting.** It stays responsive during Connect, which can take up to 30 seconds.
-
-The Start menu flash tool (**Lucky Draw - Flash Buzzer**) is still included.
+- **The USB port list shows only buzzers.** Buzzer setup now lists only ports with a buzzer plugged in. Other COM ports on the laptop (built-in, Bluetooth, other USB devices) are no longer shown, so you can't pick a wrong one by accident.
+- **"No device found" when no buzzer is plugged in**, instead of showing an unrelated port.
+- **No need to press Refresh.** While the Config tab is open, the list updates by itself within 2 seconds of plugging the buzzer in or out.
 
 **New install:** download the file ending in `_x64-setup.exe` below and run it. Already have Lucky Draw 0.2.0 or later? Open it and press **Update now**.

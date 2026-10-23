@@ -9,24 +9,18 @@ const BUZZER_APP_PORT: u16 = 3000;
 const SERIAL_BAUD: u32 = 115200;
 const CP210X_VID: u16 = 0x10C4;
 
-/// Serial ports, likeliest buzzer first: CP210x (the buzzer's USB chip), then
-/// other USB serial, then anything else. Bluetooth serial ports are dropped —
-/// laptops often have a couple, and picking one by accident looked exactly
-/// like a dead buzzer.
-#[tauri::command]
+/// Ports with a buzzer plugged in. Every buzzer uses a CP210x USB chip, so
+/// anything else (built-in COM ports, Bluetooth serial, other USB gadgets) is
+/// left out rather than offered as a port that silently never answers.
+#[tauri::command(async)]
 pub fn list_serial_ports() -> Vec<String> {
     use serialport::SerialPortType;
-    let mut ports: Vec<_> = serialport::available_ports()
+    serialport::available_ports()
         .unwrap_or_default()
         .into_iter()
-        .filter(|p| !matches!(p.port_type, SerialPortType::BluetoothPort))
-        .collect();
-    ports.sort_by_key(|p| match &p.port_type {
-        SerialPortType::UsbPort(usb) if usb.vid == CP210X_VID => 0,
-        SerialPortType::UsbPort(_) => 1,
-        _ => 2,
-    });
-    ports.into_iter().map(|p| p.port_name).collect()
+        .filter(|p| matches!(&p.port_type, SerialPortType::UsbPort(usb) if usb.vid == CP210X_VID))
+        .map(|p| p.port_name)
+        .collect()
 }
 
 /// This machine's LAN IP, used to prefill the buzzer's server URL. Uses the

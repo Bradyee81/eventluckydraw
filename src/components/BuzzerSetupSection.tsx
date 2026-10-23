@@ -177,6 +177,14 @@ export function BuzzerSetupSection() {
   // provision_buzzer's errors name this button when old or missing firmware is the likely cause.
   const suggestFlash = status === "error" && !!message?.includes("Update buzzer firmware");
 
+  // Pick up a buzzer being plugged in or out without pressing Refresh.
+  // Paused while busy so the port can't change under a Connect or flash.
+  useEffect(() => {
+    if (busy) return;
+    const timer = setInterval(refreshPorts, 2000);
+    return () => clearInterval(timer);
+  }, [busy, refreshPorts]);
+
   return (
     <section className="mt-8 border-t border-white/10 pt-8">
       <label className="mb-2 block font-semibold">Buzzer setup</label>
@@ -289,11 +297,14 @@ export function BuzzerSetupSection() {
               ))}
             </select>
           ) : (
-            <p className="text-sm text-white/30">
-              {driverOk === false
-                ? "No USB devices found. Install the USB driver above, then press Refresh."
-                : "No USB devices found. Plug the buzzer in."}
-            </p>
+            <div className="py-1.5">
+              <p className="text-sm text-[#E27676]">No device found</p>
+              <p className="text-xs text-white/40">
+                {driverOk === false
+                  ? "Install the USB driver above, then plug the buzzer in."
+                  : "Plug the buzzer in with a USB data cable. It shows up here automatically."}
+              </p>
+            </div>
           )}
         </div>
         <button
