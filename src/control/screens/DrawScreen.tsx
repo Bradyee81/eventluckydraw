@@ -256,7 +256,7 @@ export function DrawScreen() {
     if (hasList && !skipValidation && notFound) return null;
     const number = digits.join("");
     const prizeName = nextPrize?.name ?? "";
-    const sequence = await insertDrawRecord({
+    const { sequence } = await insertDrawRecord({
       number,
       participant_id: match?.id ?? null,
       participant_name: match?.name ?? null,

@@ -5,6 +5,7 @@ import { worstCaseRevealMs } from "../../lib/reelTiming";
 import { formatSectionLabel } from "../../lib/format";
 import {
   addPlannedRound,
+  deleteDrawRecords,
   deletePlannedRound,
   deletePrize,
   insertDrawRecord,
@@ -17,9 +18,14 @@ import {
 import { SectionControl } from "../../components/SectionControl";
 import { RecentDraws } from "../../components/RecentDraws";
 import { ConfirmModal } from "../../components/ConfirmModal";
-import { Toggle } from "../../components/Toggle";
 import { PrizeFormModal } from "../../components/PrizeFormModal";
-import { buildPrizePlan, nextRoundPrizes, prizeProgress } from "../../lib/prizes";
+import {
+  buildPrizePlan,
+  nextRoundPrizes,
+  prizeProgress,
+  type PrizeSlot,
+  type RoundSize,
+} from "../../lib/prizes";
 import {
   participantsForSection,
   type DrawRecord,
@@ -48,21 +54,41 @@ function pickRandom<T>(pool: T[], count: number): T[] {
   return arr.slice(0, n);
 }
 
+// The old single "One prize per round" switch, still read as the default for
+// draws without groups that have no choice saved yet.
 const ONE_PRIZE_KEY = "autoDraw.onePrizePerRound";
+// Round size chosen per draw (section), e.g. { "Lucky Draw": "group" }.
+const ROUND_SIZE_KEY = "autoDraw.roundSize";
 
-function loadOnePrizePref(): boolean {
+function loadRoundSizes(): Record<string, RoundSize> {
   try {
-    return localStorage.getItem(ONE_PRIZE_KEY) === "1";
+    return JSON.parse(localStorage.getItem(ROUND_SIZE_KEY) ?? "{}");
   } catch {
-    return false;
+    return {};
   }
 }
+
+function legacyRoundSize(): RoundSize {
+  try {
+    return localStorage.getItem(ONE_PRIZE_KEY) === "1" ? "prize" : "all";
+  } catch {
+    return "all";
+  }
+}
+
+const ROUND_SIZE_OPTIONS: { value: RoundSize; label: string }[] = [
+  { value: "prize", label: "One prize" },
+  { value: "group", label: "One group" },
+  { value: "all", label: "Whole draw" },
+];
 
 interface WinnerEntry {
   participant: Participant;
   prizeName: string;
   drawGroup: string;
   section_sequence: number | null;
+  // Its draw record once revealed, so the round can be undone.
+  record_id: number | null;
   revealed: boolean;
 }
 
@@ -95,9 +121,9 @@ export function AutoDrawScreen() {
   const [resultShown, setResultShown] = useState<string | null>(null);
   const [recentRecords, setRecentRecords] = useState<DrawRecord[]>([]);
   const [allRecords, setAllRecords] = useState<DrawRecord[]>([]);
-  // When on, each round draws only the next prize in the section that still
-  // needs winners, instead of every prize in the section at once.
-  const [onePrizePerRound, setOnePrizePerRound] = useState(loadOnePrizePref);
+  // How much each round draws, per section; can be changed between any two
+  // rounds (e.g. one prize at a time, then whole groups when time runs short).
+  const [roundSizes, setRoundSizes] = useState(loadRoundSizes);
   // Section + prize of the most recent round, for "Show Result".
   const [lastRound, setLastRound] = useState<{ section: string; prizeName: string | null } | null>(null);
   const [editingPrize, setEditingPrize] = useState<Prize | null>(null);
@@ -107,27 +133,39 @@ export function AutoDrawScreen() {
   const [prizes, setPrizes] = useState<Prize[]>([]);
   const prizeSections = Array.from(new Set(prizes.map((p) => p.section))).filter(Boolean);
 
+  // A draw's saved choice, else one group per round if it uses groups, else
+  // whatever the old switch was set to.
+  const roundSizeFor = useCallback(
+    (section: string): RoundSize => {
+      const saved = roundSizes[section];
+      const usesGroups = prizes.some((p) => p.section === section && p.draw_group);
+      if (saved && (saved !== "group" || usesGroups)) return saved;
+      return usesGroups ? "group" : legacyRoundSize();
+    },
+    [roundSizes, prizes]
+  );
+
   const sectionPrizes = prizes.filter((p) => p.section === currentSection);
-  // A section that uses groups is always drawn a group at a time; the switch
-  // only decides for sections without groups.
   const sectionUsesGroups = sectionPrizes.some((p) => p.draw_group);
-  const perRound = onePrizePerRound || sectionUsesGroups;
+  const roundSize = roundSizeFor(currentSection);
   const prizePlan = buildPrizePlan(sectionPrizes);
   const progress = prizeProgress(
     sectionPrizes,
     allRecords.filter((r) => r.section === currentSection),
     "auto"
   );
-  const nextRound = nextRoundPrizes(progress);
+  const nextRound = nextRoundPrizes(progress, roundSize);
   const nextPrize = nextRound[0] ?? null;
-  const nextGroup = nextPrize?.prize.draw_group ?? "";
+  const nextRoundWinners = nextRound.reduce((n, p) => n + p.remaining, 0);
+  const nextRoundGroup = roundSize === "group" ? (nextPrize?.prize.draw_group ?? "") : "";
 
-  const changeOnePrizePerRound = (value: boolean) => {
-    setOnePrizePerRound(value);
+  const changeRoundSize = (size: RoundSize) => {
+    const next = { ...roundSizes, [currentSection]: size };
+    setRoundSizes(next);
     try {
-      localStorage.setItem(ONE_PRIZE_KEY, value ? "1" : "0");
+      localStorage.setItem(ROUND_SIZE_KEY, JSON.stringify(next));
     } catch {
-      // Preference just won't persist — the toggle still works.
+      // Choice just won't persist — it still applies now.
     }
   };
 
@@ -203,7 +241,7 @@ export function AutoDrawScreen() {
             digits.forEach((digit, index) => emitEvent("draw:digit-set", { index, digit }));
             await sleep(worstCaseRevealMs(slots) + 500);
 
-            const sectionSequence = await insertDrawRecord({
+            const { id: recordId, sequence: sectionSequence } = await insertDrawRecord({
               number: digits.join(""),
               participant_id: w.participant.id,
               participant_name: w.participant.name,
@@ -217,7 +255,7 @@ export function AutoDrawScreen() {
 
             setWinners((prev) => {
               const next = [...prev];
-              next[i] = { ...next[i], section_sequence: sectionSequence, revealed: true };
+              next[i] = { ...next[i], section_sequence: sectionSequence, record_id: recordId, revealed: true };
               return next;
             });
             refreshRecent();
@@ -240,11 +278,12 @@ export function AutoDrawScreen() {
           sectionSettings.find((st) => st.name === section)?.slot_count ?? config.slot_count;
 
         const allSectionPrizes = prizes.filter((p) => p.section === section);
-        let plan = buildPrizePlan(allSectionPrizes);
+        let plan: PrizeSlot[] = [];
         let roundPrizeName: string | null = null;
-        if ((onePrizePerRound || allSectionPrizes.some((p) => p.draw_group)) && allSectionPrizes.length > 0) {
+        if (allSectionPrizes.length > 0) {
+          const size = roundSizeFor(section);
           const sectionRecords = (await listDrawRecords()).filter((r) => r.section === section);
-          const round = nextRoundPrizes(prizeProgress(allSectionPrizes, sectionRecords, "auto"));
+          const round = nextRoundPrizes(prizeProgress(allSectionPrizes, sectionRecords, "auto"), size);
           if (round.length === 0) {
             setError(
               `Every prize in "${section}" has been drawn. Clear its results on the Results screen to draw it again.`
@@ -255,7 +294,12 @@ export function AutoDrawScreen() {
             round.map((p) => p.prize),
             (prize) => round.find((p) => p.prize.id === prize.id)?.remaining ?? 0
           );
-          roundPrizeName = round[0].prize.draw_group || round[0].prize.name;
+          roundPrizeName =
+            size === "prize"
+              ? round[0].prize.name
+              : size === "group"
+                ? round[0].prize.draw_group || round[0].prize.name
+                : null;
         }
 
         const sectionParticipants = participantsForSection(participants, section);
@@ -302,6 +346,7 @@ export function AutoDrawScreen() {
             prizeName: plan[i].name,
             drawGroup: plan[i].group,
             section_sequence: null,
+            record_id: null,
             revealed: false,
           }))
         );
@@ -319,7 +364,7 @@ export function AutoDrawScreen() {
       isDrawing,
       winners,
       roundSlotCount,
-      onePrizePerRound,
+      roundSizeFor,
       resultShown,
       participants,
       prizes,
@@ -407,6 +452,44 @@ export function AutoDrawScreen() {
     setResultShown("latest");
   };
   const canShowLatest = !isDrawing && winners.some((w) => w.revealed);
+
+  // Panic button, for a round started with the wrong setting. Before the
+  // reveal nothing is logged yet, so cancelling just drops the round. After
+  // it, undoing deletes that round's records: the prizes need winners again
+  // and those people can be drawn again.
+  const [confirmingUndo, setConfirmingUndo] = useState(false);
+  const revealedRecordIds = winners.flatMap((w) => (w.record_id !== null ? [w.record_id] : []));
+  const canUndoRound = !isDrawing && !busy && revealedRecordIds.length > 0;
+
+  const clearRound = () => {
+    setWinners([]);
+    setIsDrawing(false);
+    setRoundSlotCount(null);
+    setLastRound(null);
+    if (resultShown) emitEvent("draw:hide-result", {});
+    setResultShown(null);
+    emitEvent("draw:reset", {});
+  };
+
+  const cancelRound = () => {
+    if (!isDrawing || busy) return;
+    clearRound();
+    setError(null);
+    setNotice("Round cancelled — nothing was logged. Change the setting and draw again.");
+  };
+
+  const undoLastRound = async () => {
+    setConfirmingUndo(false);
+    if (!canUndoRound) return;
+    const count = revealedRecordIds.length;
+    await deleteDrawRecords(revealedRecordIds);
+    clearRound();
+    refreshRecent();
+    setError(null);
+    setNotice(
+      `Last round undone — ${count} winner${count === 1 ? "" : "s"} removed from the results. Their prizes are back in the list.`
+    );
+  };
 
   const saveEditPrize = async (patch: PrizeInput) => {
     if (!editingPrize) return;
@@ -496,35 +579,63 @@ export function AutoDrawScreen() {
               />
               Exclude previous winners
             </label>
-            <div className="pb-2" title={sectionUsesGroups ? "This draw uses groups, so each round draws one group." : undefined}>
-              <Toggle
-                checked={perRound}
-                onChange={changeOnePrizePerRound}
-                disabled={isDrawing || sectionUsesGroups}
-                label={sectionUsesGroups ? "One group per round (set by the prize list)" : "One prize per round"}
-              />
+            <div className="pb-1">
+              <div className="mb-1 text-xs text-white/50">Each round draws</div>
+              <div className="inline-flex overflow-hidden rounded-md border border-white/15">
+                {ROUND_SIZE_OPTIONS.map((opt) => {
+                  const unavailable = opt.value === "group" && !sectionUsesGroups;
+                  const active = roundSize === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => changeRoundSize(opt.value)}
+                      disabled={isDrawing || unavailable}
+                      title={unavailable ? "No groups set for this draw's prizes" : undefined}
+                      className={`px-3 py-1.5 text-sm disabled:opacity-30 ${
+                        active ? "bg-[#F5C518] font-semibold text-[#10141F]" : "text-white/70 hover:bg-white/5"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <button
               onClick={() => beginOrAdvance(currentSection, excludeRepeats)}
-              disabled={
-                busy ||
-                !currentSection ||
-                (!isDrawing && (perRound ? !nextPrize : prizePlan.length === 0))
-              }
+              disabled={busy || !currentSection || (!isDrawing && !nextPrize)}
               className="rounded-md bg-[#F5C518] px-5 py-2 font-semibold text-[#10141F] disabled:opacity-50"
             >
               {!isDrawing
-                ? perRound
-                  ? nextPrize
-                    ? nextGroup
-                      ? `Draw ${nextGroup} (${nextRound.reduce((n, p) => n + p.remaining, 0)} prizes)`
-                      : "Draw Next Prize"
-                    : "All prizes drawn"
-                  : "Draw Round"
+                ? !nextPrize
+                  ? "All prizes drawn"
+                  : roundSize === "prize" || nextRoundWinners === 1
+                    ? "Draw Next Prize"
+                    : nextRoundGroup
+                      ? `Draw ${nextRoundGroup} (${nextRoundWinners} prizes)`
+                      : `Draw ${nextRoundWinners} Prizes`
                 : busy
                   ? "Revealing…"
                   : `Reveal ${winners.length} Winner${winners.length === 1 ? "" : "s"}`}
             </button>
+            {isDrawing && !busy && (
+              <button
+                onClick={cancelRound}
+                title="Stop this round before revealing. Nothing has been logged yet."
+                className="rounded-md border border-[#E27676]/60 px-3 py-2 text-sm font-semibold text-[#E27676] hover:bg-[#E27676]/10"
+              >
+                ✕ Cancel round
+              </button>
+            )}
+            {canUndoRound && (
+              <button
+                onClick={() => setConfirmingUndo(true)}
+                title="Remove the round you just drew from the results"
+                className="rounded-md border border-[#E27676]/60 px-3 py-2 text-sm font-semibold text-[#E27676] hover:bg-[#E27676]/10"
+              >
+                ↶ Undo last round
+              </button>
+            )}
             <button
               onClick={handleSaveAsPlannedRound}
               disabled={!currentSection}
@@ -564,7 +675,7 @@ export function AutoDrawScreen() {
                 <>
                   <div className="space-y-1">
                     {progress.map(({ prize: p, drawn, remaining }) => {
-                      const isNext = perRound && nextRound.some((n) => n.prize.id === p.id);
+                      const isNext = nextRound.some((n) => n.prize.id === p.id);
                       return (
                       <div
                         key={p.id}
@@ -615,7 +726,7 @@ export function AutoDrawScreen() {
                   <p className="mt-2 text-xs text-white/40">
                     {prizePlan.length} total winner{prizePlan.length === 1 ? "" : "s"} for "
                     {currentSection}"
-                    {perRound &&
+                    {progress.length > 0 &&
                       ` — ${progress.filter((x) => x.remaining === 0).length} of ${progress.length} prizes drawn`}
                   </p>
                 </>
@@ -752,6 +863,16 @@ export function AutoDrawScreen() {
           prize={editingPrize}
           onSave={saveEditPrize}
           onClose={() => setEditingPrize(null)}
+        />
+      )}
+
+      {confirmingUndo && (
+        <ConfirmModal
+          title="Undo the last round?"
+          message={`${revealedRecordIds.length} winner${revealedRecordIds.length === 1 ? "" : "s"} from the round you just drew will be removed from the results. Their prizes go back in the list, and those people can be drawn again.`}
+          confirmLabel="Undo round"
+          onConfirm={undoLastRound}
+          onCancel={() => setConfirmingUndo(false)}
         />
       )}
 

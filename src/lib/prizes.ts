@@ -48,13 +48,19 @@ export function prizeProgress(
   });
 }
 
-/** The prizes the next round draws, in list order: the first prize that
- *  still needs winners, plus — if it has a group — every other prize in that
- *  group that still needs winners. Empty when the section is fully drawn. */
-export function nextRoundPrizes(progress: PrizeProgress[]): PrizeProgress[] {
-  const first = progress.find((p) => p.remaining > 0);
+/** How much of a section one Auto Draw round draws. */
+export type RoundSize = "prize" | "group" | "all";
+
+/** The prizes the next round draws, in list order. "prize": the first prize
+ *  that still needs winners. "group": that prize plus every other prize in
+ *  its group that still needs winners (just the prize if it has no group).
+ *  "all": everything still needing winners. Empty when fully drawn. */
+export function nextRoundPrizes(progress: PrizeProgress[], size: RoundSize = "group"): PrizeProgress[] {
+  const remaining = progress.filter((p) => p.remaining > 0);
+  const first = remaining[0];
   if (!first) return [];
+  if (size === "all") return remaining;
   const group = first.prize.draw_group;
-  if (!group) return [first];
-  return progress.filter((p) => p.remaining > 0 && p.prize.draw_group === group);
+  if (size === "prize" || !group) return [first];
+  return remaining.filter((p) => p.prize.draw_group === group);
 }

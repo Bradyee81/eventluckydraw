@@ -110,7 +110,7 @@ export async function deleteParticipant(id: number): Promise<void> {
   await db.execute("DELETE FROM participants WHERE id = $1", [id]);
 }
 
-/** Inserts a draw record and returns its position within its section (1st, 2nd, ...). */
+/** Inserts a draw record; returns its id and its position within its section (1st, 2nd, ...). */
 export async function insertDrawRecord(record: {
   number: string;
   participant_id: number | null;
@@ -121,7 +121,7 @@ export async function insertDrawRecord(record: {
   exclude_repeat_winners: boolean | null;
   prize_name: string;
   draw_group: string;
-}): Promise<number> {
+}): Promise<{ id: number; sequence: number }> {
   const db = await getDb();
   const countRows = await db.select<{ c: number }[]>(
     "SELECT COUNT(*) as c FROM draw_records WHERE section = $1",
@@ -129,7 +129,7 @@ export async function insertDrawRecord(record: {
   );
   const sectionSequence = (countRows[0]?.c ?? 0) + 1;
 
-  await db.execute(
+  const result = await db.execute(
     "INSERT INTO draw_records (number, participant_id, participant_name, operator_note, section, section_sequence, mode, exclude_repeat_winners, prize_name, draw_group, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
     [
       record.number,
@@ -145,12 +145,20 @@ export async function insertDrawRecord(record: {
       new Date().toISOString(),
     ]
   );
-  return sectionSequence;
+  return { id: result.lastInsertId ?? 0, sequence: sectionSequence };
 }
 
 export async function listDrawRecords(): Promise<DrawRecord[]> {
   const db = await getDb();
   return db.select<DrawRecord[]>("SELECT * FROM draw_records ORDER BY id DESC");
+}
+
+/** Removes specific draw records, e.g. a round drawn by mistake. */
+export async function deleteDrawRecords(ids: number[]): Promise<void> {
+  const db = await getDb();
+  for (const id of ids) {
+    await db.execute("DELETE FROM draw_records WHERE id = $1", [id]);
+  }
 }
 
 export async function clearDrawRecords(): Promise<void> {
