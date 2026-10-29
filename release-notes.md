@@ -1,9 +1,8 @@
 **What's new**
 
-This release comes with **buzzer firmware v2**. To get it onto a buzzer, plug it in by USB, open **Setup → Config → Buzzer setup** and press **Update buzzer firmware** (about a minute, don't unplug). The buzzer keeps its saved WiFi, so you don't need to press Connect again.
-
-- **The buzzer finds the laptop by itself.** Lucky Draw now announces itself on the WiFi, and a v2 buzzer sends its presses to whichever laptop is running it. Switching laptops, or the laptop getting a new address from the router, no longer leaves the buzzer "disconnected". Connect is now only needed for a new WiFi network or password.
-- **Buzzer status light.** The buzzer shows its state on the small LED on the board, so you can check it at a glance: steady when ready, slow blink while looking for Lucky Draw, fast blink while joining the WiFi, and a quick blink on each press. Buzzers can also have a coloured (RGB) status light added; see **What the buzzer's light means** in Buzzer setup.
-- **Buzzer firmware version check.** Buzzer setup now shows **Buzzer firmware: v2 ✓ up to date**, or tells you an update is available and highlights **Update buzzer firmware**.
+- **Prize groups.** The prize list has a new optional **Group** column. Prizes in a draw that share a group are drawn together in one Auto Draw round: for example, all 6 "Group A" prizes in one press, then "Group B". A draw that uses groups always goes one group per round, and the button shows what's next, e.g. "Draw Group A (6 prizes)". Prizes without a group are drawn one at a time with **One prize per round** switched on.
+- **Prizes in Manual Draw.** If the selected draw has prizes in the prize list, Manual Draw shows the next one ("Prize: … (1 of 5)") and logs it with each confirmed winner, from the top of the list down. It also appears in Show Result.
+- **Group shown with each winner.** Recent Draws and the Results screen show a **Group** tag next to the prize, and the results export has a Group column.
+- Prizes are given out from the **top of the prize list down**, so put them in the order you want them drawn. The CSV template now includes the Group column.
 
 **New install:** download the file ending in `_x64-setup.exe` below and run it. Already have Lucky Draw 0.2.0 or later? Open it and press **Update now**.

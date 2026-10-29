@@ -1,5 +1,14 @@
 import Database from "@tauri-apps/plugin-sql";
-import type { AppConfig, DrawMode, DrawRecord, Participant, PlannedRound, Prize, SectionSetting } from "../types";
+import type {
+  AppConfig,
+  DrawMode,
+  DrawRecord,
+  Participant,
+  PlannedRound,
+  Prize,
+  PrizeInput,
+  SectionSetting,
+} from "../types";
 
 let dbPromise: Promise<Database> | null = null;
 
@@ -111,6 +120,7 @@ export async function insertDrawRecord(record: {
   mode: DrawMode;
   exclude_repeat_winners: boolean | null;
   prize_name: string;
+  draw_group: string;
 }): Promise<number> {
   const db = await getDb();
   const countRows = await db.select<{ c: number }[]>(
@@ -120,7 +130,7 @@ export async function insertDrawRecord(record: {
   const sectionSequence = (countRows[0]?.c ?? 0) + 1;
 
   await db.execute(
-    "INSERT INTO draw_records (number, participant_id, participant_name, operator_note, section, section_sequence, mode, exclude_repeat_winners, prize_name, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+    "INSERT INTO draw_records (number, participant_id, participant_name, operator_note, section, section_sequence, mode, exclude_repeat_winners, prize_name, draw_group, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
     [
       record.number,
       record.participant_id,
@@ -131,6 +141,7 @@ export async function insertDrawRecord(record: {
       record.mode,
       record.exclude_repeat_winners === null ? null : record.exclude_repeat_winners ? 1 : 0,
       record.prize_name,
+      record.draw_group,
       new Date().toISOString(),
     ]
   );
@@ -195,27 +206,19 @@ export async function listPrizes(): Promise<Prize[]> {
   return db.select<Prize[]>("SELECT * FROM prizes ORDER BY id ASC");
 }
 
-export async function addPrize(prize: {
-  section: string;
-  name: string;
-  winner_count: number;
-  description: string;
-}): Promise<void> {
+export async function addPrize(prize: PrizeInput): Promise<void> {
   const db = await getDb();
   await db.execute(
-    "INSERT INTO prizes (section, name, winner_count, description, created_at) VALUES ($1, $2, $3, $4, $5)",
-    [prize.section, prize.name, prize.winner_count, prize.description, new Date().toISOString()]
+    "INSERT INTO prizes (section, name, winner_count, description, draw_group, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
+    [prize.section, prize.name, prize.winner_count, prize.description, prize.draw_group, new Date().toISOString()]
   );
 }
 
-export async function updatePrize(
-  id: number,
-  patch: { section: string; name: string; winner_count: number; description: string }
-): Promise<void> {
+export async function updatePrize(id: number, patch: PrizeInput): Promise<void> {
   const db = await getDb();
   await db.execute(
-    "UPDATE prizes SET section = $1, name = $2, winner_count = $3, description = $4 WHERE id = $5",
-    [patch.section, patch.name, patch.winner_count, patch.description, id]
+    "UPDATE prizes SET section = $1, name = $2, winner_count = $3, description = $4, draw_group = $5 WHERE id = $6",
+    [patch.section, patch.name, patch.winner_count, patch.description, patch.draw_group, id]
   );
 }
 
@@ -225,15 +228,13 @@ export async function deletePrize(id: number): Promise<void> {
 }
 
 /** Replaces the whole prize catalog, mirroring how participant import works. */
-export async function replacePrizes(
-  prizes: { section: string; name: string; winner_count: number; description: string }[]
-): Promise<void> {
+export async function replacePrizes(prizes: PrizeInput[]): Promise<void> {
   const db = await getDb();
   await db.execute("DELETE FROM prizes");
   for (const p of prizes) {
     await db.execute(
-      "INSERT INTO prizes (section, name, winner_count, description, created_at) VALUES ($1, $2, $3, $4, $5)",
-      [p.section, p.name, p.winner_count, p.description, new Date().toISOString()]
+      "INSERT INTO prizes (section, name, winner_count, description, draw_group, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
+      [p.section, p.name, p.winner_count, p.description, p.draw_group, new Date().toISOString()]
     );
   }
 }

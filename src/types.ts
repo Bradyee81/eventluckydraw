@@ -33,9 +33,11 @@ export interface DrawRecord {
   mode: DrawMode;
   // SQLite has no boolean type — comes back as 0/1, or NULL for manual draws.
   exclude_repeat_winners: number | null;
-  // Snapshot of the prize name at the time this was drawn (Auto Mode only;
-  // '' for manual draws or auto rounds with no prize attached).
+  // Snapshot of the prize name at the time this was drawn ('' when no prize
+  // was attached).
   prize_name: string;
+  // Snapshot of that prize's group, e.g. "Group A" ('' = none).
+  draw_group: string;
   created_at: string;
 }
 
@@ -45,8 +47,13 @@ export interface Prize {
   name: string;
   winner_count: number;
   description: string;
+  /** Prizes in a section with the same group are drawn together; "" = on its own. */
+  draw_group: string;
   created_at: string;
 }
+
+/** A prize as entered or imported, before it has an id. */
+export type PrizeInput = Pick<Prize, "section" | "name" | "winner_count" | "description" | "draw_group">;
 
 export interface PlannedRound {
   id: number;

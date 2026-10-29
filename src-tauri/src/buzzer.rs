@@ -1,6 +1,7 @@
 use std::net::UdpSocket;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{self, Sender};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -19,6 +20,22 @@ const BUZZER_PORT: u16 = 3000;
 /// Must match DISCOVERY_PORT / DISCOVERY_PREFIX in the firmware.
 const DISCOVERY_PORT: u16 = 3001;
 const ANNOUNCE_EVERY: Duration = Duration::from_secs(2);
+
+/// Whether the Output window's reels are spinning. Sent with every
+/// announcement ("SPIN=1"), so firmware v3+ can light the button while they
+/// spin. Older firmware reads only the port number and ignores the rest.
+static REELS_SPINNING: AtomicBool = AtomicBool::new(false);
+/// Wakes the announcer to send straight away when the spinning state changes.
+static ANNOUNCE_NOW: OnceLock<Sender<()>> = OnceLock::new();
+
+#[tauri::command]
+pub fn set_reels_spinning(spinning: bool) {
+    if REELS_SPINNING.swap(spinning, Ordering::SeqCst) != spinning {
+        if let Some(tx) = ANNOUNCE_NOW.get() {
+            let _ = tx.send(());
+        }
+    }
+}
 
 /// The firmware sends a heartbeat every 5s; if we haven't heard anything
 /// (heartbeat or button press) within this window, treat it as disconnected.
@@ -71,27 +88,51 @@ pub fn spawn(app_handle: AppHandle) {
     let last_seen: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
 
     spawn_watchdog(app_handle.clone(), connected.clone(), last_seen.clone());
-    spawn_request_loop(app_handle, server, connected, last_seen);
-    spawn_announcer();
+    spawn_request_loop(app_handle.clone(), server, connected, last_seen);
+    spawn_announcer(app_handle);
 }
 
-/// Broadcasts "LUCKYDRAW <port>" on the WiFi every couple of seconds. Bound
-/// to the WiFi adapter's address so it goes out on the network the buzzer is
-/// on (not Ethernet/VPN). Outbound, so no firewall rule is needed for it.
-fn spawn_announcer() {
-    std::thread::spawn(|| {
-        let message = format!("LUCKYDRAW {BUZZER_PORT}");
-        loop {
-            if let Some(ip) = wifi_adapter_ipv4().or_else(detect_local_ip) {
-                let sent = UdpSocket::bind((ip.as_str(), 0)).and_then(|socket| {
-                    socket.set_broadcast(true)?;
-                    socket.send_to(message.as_bytes(), ("255.255.255.255", DISCOVERY_PORT))
-                });
-                if let Err(err) = sent {
-                    eprintln!("buzzer: announcement on {ip} failed: {err}");
-                }
+/// Broadcasts "LUCKYDRAW <port> SPIN=<0|1>" on the WiFi every couple of
+/// seconds, and straight away when the reels start or stop. Bound to the WiFi
+/// adapter's address so it goes out on the network the buzzer is on (not
+/// Ethernet/VPN). Outbound, so no firewall rule is needed for it.
+///
+/// A change is also sent directly to the last buzzer that reached us: WiFi
+/// delivers that more reliably than a broadcast, so the button light follows
+/// the reels promptly.
+fn spawn_announcer(app_handle: AppHandle) {
+    let (tx, rx) = mpsc::channel::<()>();
+    let _ = ANNOUNCE_NOW.set(tx);
+    std::thread::spawn(move || loop {
+        let changed = rx.recv_timeout(ANNOUNCE_EVERY).is_ok();
+        let spinning = REELS_SPINNING.load(Ordering::SeqCst);
+        let message = format!("LUCKYDRAW {BUZZER_PORT} SPIN={}", u8::from(spinning));
+
+        let Some(ip) = wifi_adapter_ipv4().or_else(detect_local_ip) else {
+            continue;
+        };
+        let socket = match UdpSocket::bind((ip.as_str(), 0)).and_then(|s| {
+            s.set_broadcast(true)?;
+            Ok(s)
+        }) {
+            Ok(socket) => socket,
+            Err(err) => {
+                eprintln!("buzzer: announcement on {ip} failed: {err}");
+                continue;
             }
-            std::thread::sleep(ANNOUNCE_EVERY);
+        };
+        let _ = socket.send_to(message.as_bytes(), ("255.255.255.255", DISCOVERY_PORT));
+        if changed {
+            let buzzer_ip = app_handle
+                .state::<BuzzerContactState>()
+                .0
+                .lock()
+                .unwrap()
+                .last_ip
+                .clone();
+            if let Some(buzzer_ip) = buzzer_ip {
+                let _ = socket.send_to(message.as_bytes(), (buzzer_ip.as_str(), DISCOVERY_PORT));
+            }
         }
     });
 }

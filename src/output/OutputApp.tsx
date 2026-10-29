@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { SlotReel } from "../components/SlotReel";
 import { useReelMachine } from "../lib/reelMachine";
@@ -55,6 +56,13 @@ export function OutputApp() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The buzzer's button light follows the reels: on while any reel spins or
+  // is still stopping, off once every reel has landed (or is idle).
+  const spinning = statuses.some((s) => s === "rolling" || s === "landing");
+  useEffect(() => {
+    invoke("set_reels_spinning", { spinning }).catch(() => {});
+  }, [spinning]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

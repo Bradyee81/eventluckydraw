@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppData } from "../AppDataContext";
 import { emitEvent, onEvent } from "../../lib/events";
-import { findParticipantByTicket, insertDrawRecord, listDrawRecords } from "../../lib/db";
+import { findParticipantByTicket, insertDrawRecord, listDrawRecords, listPrizes } from "../../lib/db";
+import { prizeProgress } from "../../lib/prizes";
 import { SectionControl } from "../../components/SectionControl";
 import { RecentDraws } from "../../components/RecentDraws";
 import { Toggle } from "../../components/Toggle";
 import { formatSectionLabel } from "../../lib/format";
-import { participantsForSection, type DrawRecord, type Participant } from "../../types";
+import { participantsForSection, type DrawRecord, type Participant, type Prize } from "../../types";
 
 function nextEmptyIndex(digits: (number | null)[], from: number): number {
   for (let step = 1; step <= digits.length; step++) {
@@ -74,13 +75,35 @@ export function DrawScreen() {
     };
   }, [flashBuzz]);
 
+  const [allRecords, setAllRecords] = useState<DrawRecord[]>([]);
+  const [prizes, setPrizes] = useState<Prize[]>([]);
+  // Prize logged with the confirmed number, kept for the confirmed panel and
+  // Show Result after the next-prize pointer has moved on.
+  const [confirmedPrize, setConfirmedPrize] = useState<string | null>(null);
+
   const refreshRecent = useCallback(() => {
-    listDrawRecords().then((records) => setRecentRecords(records.slice(0, 8)));
+    listDrawRecords().then((records) => {
+      setAllRecords(records);
+      setRecentRecords(records.slice(0, 8));
+    });
   }, []);
 
   useEffect(() => {
     refreshRecent();
+    listPrizes().then(setPrizes);
   }, [refreshRecent]);
+
+  // Prizes for this draw are given out from the top of the list down, one per
+  // confirmed winner, the same order Auto Draw uses.
+  const sectionPrizes = prizes.filter((p) => p.section === currentSection);
+  const progress = prizeProgress(
+    sectionPrizes,
+    allRecords.filter((r) => r.section === currentSection),
+    "manual"
+  );
+  const nextPrize = progress.find((p) => p.remaining > 0)?.prize ?? null;
+  const prizesTotal = progress.reduce((n, p) => n + p.prize.winner_count, 0);
+  const prizesGiven = progress.reduce((n, p) => n + p.drawn, 0);
 
   // Opening Manual Draw switches the Output window to this screen's draw (its
   // slot count) and gets the reels spinning, ready for the first number.
@@ -216,6 +239,7 @@ export function DrawScreen() {
     setHistory([]);
     setRedoStack([]);
     setConfirmedNumber(null);
+    setConfirmedPrize(null);
     setMatch(null);
     setNotFound(false);
     setNote("");
@@ -231,6 +255,7 @@ export function DrawScreen() {
     if (!isComplete || confirmedNumber) return null;
     if (hasList && !skipValidation && notFound) return null;
     const number = digits.join("");
+    const prizeName = nextPrize?.name ?? "";
     const sequence = await insertDrawRecord({
       number,
       participant_id: match?.id ?? null,
@@ -239,9 +264,11 @@ export function DrawScreen() {
       section: currentSection,
       mode: "manual",
       exclude_repeat_winners: null,
-      prize_name: "",
+      prize_name: prizeName,
+      draw_group: nextPrize?.draw_group ?? "",
     });
     setConfirmedNumber(number);
+    setConfirmedPrize(prizeName || null);
     setSectionSequence(sequence);
     emitEvent("draw:confirmed", { number, participantName: match?.name ?? null });
     setSaveMsg("Draw logged.");
@@ -257,6 +284,7 @@ export function DrawScreen() {
     match,
     note,
     currentSection,
+    nextPrize,
     refreshRecent,
   ]);
 
@@ -272,7 +300,10 @@ export function DrawScreen() {
       confirm().then((logged) => {
         if (!logged) return;
         startNewDraw();
-        flashBuzz(`✓ Logged ${logged} — rolling for next winner`, LOGGED_FLASH_MS);
+        flashBuzz(
+          `✓ Logged ${logged}${nextPrize ? ` (${nextPrize.name})` : ""} — rolling for next winner`,
+          LOGGED_FLASH_MS
+        );
       });
     } else if (history.length === 0) {
       emitEvent("draw:roll", {});
@@ -286,7 +317,9 @@ export function DrawScreen() {
     } else if (confirmedNumber) {
       emitEvent("draw:show-result", {
         title: formatSectionLabel(currentSection, sectionSequence ?? 1),
-        entries: [{ number: confirmedNumber, name: match?.name ?? null }],
+        entries: [
+          { number: confirmedNumber, name: match?.name ?? null, prize: confirmedPrize ?? undefined },
+        ],
       });
       setResultShown(true);
     }
@@ -351,6 +384,28 @@ export function DrawScreen() {
         {buzzFlash && (
           <div className="mb-4 inline-block rounded-md border border-[#F5C518]/40 bg-[#F5C518]/10 px-3 py-1.5 text-sm font-semibold text-[#F5C518]">
             {buzzFlash}
+          </div>
+        )}
+
+        {sectionPrizes.length > 0 && !confirmedNumber && (
+          <div className="mb-4 rounded-md border border-white/10 bg-white/[0.02] px-3 py-2 text-sm">
+            {nextPrize ? (
+              <>
+                <span className="text-white/50">Prize: </span>
+                <span className="font-semibold text-[#F5C518]">{nextPrize.name}</span>
+                {nextPrize.description && (
+                  <span className="ml-2 text-xs text-white/40">{nextPrize.description}</span>
+                )}
+                <span className="ml-2 text-xs text-white/40">
+                  ({prizesGiven + 1} of {prizesTotal})
+                </span>
+              </>
+            ) : (
+              <span className="text-white/50">
+                All {prizesTotal} prizes for this draw are logged. More winners are logged without a
+                prize.
+              </span>
+            )}
           </div>
         )}
 
@@ -478,6 +533,7 @@ export function DrawScreen() {
               </button>
             </div>
             {match && <div className="mt-1 text-white/80">{match.name}</div>}
+            {confirmedPrize && <div className="mt-1 text-sm text-[#F5C518]/80">{confirmedPrize}</div>}
             {saveMsg && (
               <div className="mt-2 text-xs text-white/40">
                 {saveMsg} Press Enter or "Start New Draw" to continue.

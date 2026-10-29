@@ -89,7 +89,14 @@ export function ResultsScreen() {
                 <td className="px-3 py-2 text-white/60">
                   {formatSectionLabel(r.section, r.section_sequence)}
                 </td>
-                <td className="px-3 py-2 text-[#F5C518]">{r.prize_name || "—"}</td>
+                <td className="px-3 py-2 text-[#F5C518]">
+                  {r.draw_group && (
+                    <span className="mr-1.5 rounded border border-[#F5C518]/40 px-1 text-[10px] font-semibold">
+                      {r.draw_group}
+                    </span>
+                  )}
+                  {r.prize_name || "—"}
+                </td>
                 <td className="px-3 py-2 text-white/60">
                   {r.mode === "auto" ? "Auto" : "Manual"}
                   {r.mode === "auto" && r.exclude_repeat_winners !== null && (

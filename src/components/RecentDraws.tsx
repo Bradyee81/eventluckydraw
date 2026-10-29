@@ -18,8 +18,15 @@ export function RecentDraws({ records }: { records: DrawRecord[] }) {
             {r.participant_name && (
               <div className="truncate text-xs text-white/70">{r.participant_name}</div>
             )}
-            {r.prize_name && (
-              <div className="truncate text-xs text-[#F5C518]">{r.prize_name}</div>
+            {(r.prize_name || r.draw_group) && (
+              <div className="flex items-center gap-1.5 text-xs">
+                {r.draw_group && (
+                  <span className="shrink-0 rounded border border-[#F5C518]/40 px-1 text-[10px] font-semibold text-[#F5C518]">
+                    {r.draw_group}
+                  </span>
+                )}
+                <span className="truncate text-[#F5C518]">{r.prize_name}</span>
+              </div>
             )}
             <div className="text-[10px] text-white/35">
               {new Date(r.created_at).toLocaleTimeString()}

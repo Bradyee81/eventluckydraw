@@ -66,6 +66,18 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/0009_auto_draw_section.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 10,
+            description: "add prize draw groups",
+            sql: include_str!("../migrations/0010_prize_groups.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 11,
+            description: "add prize group to draw records",
+            sql: include_str!("../migrations/0011_draw_record_groups.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -91,6 +103,7 @@ pub fn run() {
             firmware::bundled_firmware_version,
             admin::verify_admin_password,
             buzzer::buzzer_contact,
+            buzzer::set_reels_spinning,
             network::detect_wifi_network,
             network::buzzer_firewall_allowed,
             network::allow_buzzer_firewall,

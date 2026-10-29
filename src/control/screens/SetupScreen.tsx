@@ -18,7 +18,7 @@ import {
 } from "../../lib/db";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { PrizeFormModal } from "../../components/PrizeFormModal";
-import type { Participant, Prize } from "../../types";
+import type { Participant, Prize, PrizeInput } from "../../types";
 
 const dropdownStyle = { backgroundColor: "#10141F", color: "#E6E9EF" };
 const SLOT_OPTIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -248,6 +248,7 @@ export function SetupScreen() {
   const [newPrizeName, setNewPrizeName] = useState("");
   const [newPrizeCount, setNewPrizeCount] = useState(1);
   const [newPrizeDescription, setNewPrizeDescription] = useState("");
+  const [newPrizeGroup, setNewPrizeGroup] = useState("");
 
   const refreshPrizes = () =>
     listPrizes().then((list) => {
@@ -287,9 +288,11 @@ export function SetupScreen() {
     });
     if (!path) return;
     const csv =
-      "Section Name,Prize,Winner Count,Description\r\n" +
-      "Grand Prize,iPhone 15 Pro,1,sponsored by Acme\r\n" +
-      "Consolation,Gift Voucher,5,\r\n";
+      "Section Name,Prize,Winner Count,Group,Description\r\n" +
+      "Grand Prize,iPhone 15 Pro,1,,sponsored by Acme\r\n" +
+      "Consolation,Gift Voucher,1,Group A,\r\n" +
+      "Consolation,Smart Watch,1,Group A,\r\n" +
+      "Consolation,Power Bank,1,Group B,\r\n";
     await writeTextFile(path, csv);
     setPrizeStatus(`Template saved to ${path}`);
   };
@@ -301,23 +304,20 @@ export function SetupScreen() {
       name: newPrizeName.trim(),
       winner_count: Math.max(1, newPrizeCount),
       description: newPrizeDescription.trim(),
+      draw_group: newPrizeGroup.trim(),
     });
     setNewPrizeSection("");
     setNewPrizeName("");
     setNewPrizeCount(1);
     setNewPrizeDescription("");
+    setNewPrizeGroup("");
     refreshPrizes();
   };
 
   const [editingPrize, setEditingPrize] = useState<Prize | null>(null);
   const [deletingPrize, setDeletingPrize] = useState<Prize | null>(null);
 
-  const saveEditPrize = async (patch: {
-    section: string;
-    name: string;
-    winner_count: number;
-    description: string;
-  }) => {
+  const saveEditPrize = async (patch: PrizeInput) => {
     if (!editingPrize) return;
     await updatePrize(editingPrize.id, patch);
     setEditingPrize(null);
@@ -601,8 +601,9 @@ export function SetupScreen() {
 
       <h2 className="mb-1 text-lg font-bold">Prizes</h2>
       <p className="mb-6 text-white/60">
-        Optional: set up which prize belongs to which section ahead of the event. Auto Draw's
-        Planned Rounds picks a section here and fills in the prize and winner count automatically.
+        Optional: set up which prize belongs to which section ahead of the event. Prizes are given
+        out from the top of the list down. Auto Draw draws them for you; Manual Draw shows the next
+        prize and logs it with each winner.
       </p>
 
       <div className="rounded-lg border border-dashed border-white/20 bg-white/[0.02] p-8 text-center">
@@ -624,7 +625,8 @@ export function SetupScreen() {
           {prizeBusy ? "Importing…" : "Choose CSV / Excel file"}
         </button>
         <p className="mt-3 text-xs text-white/40">
-          Expected columns: Section Name, Prize, Winner Count, and an optional Description.
+          Expected columns: Section Name, Prize, Winner Count, and optional Group and Description.
+          Prizes in a section with the same Group are drawn together in one Auto Draw round.
           Re-importing replaces the current prize list.
         </p>
         <button
@@ -667,6 +669,15 @@ export function SetupScreen() {
           />
         </div>
         <div>
+          <label className="mb-1 block text-xs text-white/60">Group (optional)</label>
+          <input
+            value={newPrizeGroup}
+            onChange={(e) => setNewPrizeGroup(e.target.value)}
+            placeholder="e.g. Group A"
+            className="w-28 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-[#F5C518]"
+          />
+        </div>
+        <div>
           <label className="mb-1 block text-xs text-white/60">Description (optional)</label>
           <input
             value={newPrizeDescription}
@@ -692,6 +703,7 @@ export function SetupScreen() {
                 <th className="px-3 py-2">Section</th>
                 <th className="px-3 py-2">Prize</th>
                 <th className="px-3 py-2">Winners</th>
+                <th className="px-3 py-2">Group</th>
                 <th className="px-3 py-2">Description</th>
                 <th className="px-3 py-2"></th>
               </tr>
@@ -702,6 +714,7 @@ export function SetupScreen() {
                   <td className="px-3 py-1.5">{p.section}</td>
                   <td className="px-3 py-1.5 font-semibold text-[#F5C518]">{p.name}</td>
                   <td className="px-3 py-1.5">{p.winner_count}</td>
+                  <td className="px-3 py-1.5 text-white/60">{p.draw_group}</td>
                   <td className="px-3 py-1.5 text-white/60">{p.description}</td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-right">
                     <button

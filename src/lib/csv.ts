@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import type { DrawRecord } from "../types";
+import type { DrawRecord, PrizeInput } from "../types";
 
 const TICKET_HEADER_ALIASES = ["ticket number", "ticket_number", "ticket", "number", "no", "id"];
 const NAME_HEADER_ALIASES = ["name", "full name", "participant", "participant name"];
@@ -52,13 +52,9 @@ const SECTION_HEADER_ALIASES = ["section", "section name", "round"];
 const PRIZE_NAME_HEADER_ALIASES = ["prize", "prize name", "name"];
 const WINNER_COUNT_HEADER_ALIASES = ["number", "winner count", "winners", "quantity", "qty", "count"];
 const DESCRIPTION_HEADER_ALIASES = ["description", "desc", "notes"];
+const GROUP_HEADER_ALIASES = ["group", "draw group", "prize group"];
 
-export interface ParsedPrize {
-  section: string;
-  name: string;
-  winner_count: number;
-  description: string;
-}
+export type ParsedPrize = PrizeInput;
 
 export async function parsePrizeFile(file: File): Promise<ParsedPrize[]> {
   const rows = await readFirstSheetRows(file);
@@ -70,6 +66,7 @@ export async function parsePrizeFile(file: File): Promise<ParsedPrize[]> {
   const nameHeader = headers.find((h) => PRIZE_NAME_HEADER_ALIASES.includes(normalizeHeader(h))) ?? headers[1] ?? headers[0];
   const countHeader = headers.find((h) => WINNER_COUNT_HEADER_ALIASES.includes(normalizeHeader(h)));
   const descriptionHeader = headers.find((h) => DESCRIPTION_HEADER_ALIASES.includes(normalizeHeader(h)));
+  const groupHeader = headers.find((h) => GROUP_HEADER_ALIASES.includes(normalizeHeader(h)));
 
   const prizes: ParsedPrize[] = [];
   for (const row of rows) {
@@ -78,7 +75,8 @@ export async function parsePrizeFile(file: File): Promise<ParsedPrize[]> {
     if (!section || !name) continue;
     const winnerCount = countHeader ? Math.max(1, parseInt(String(row[countHeader]), 10) || 1) : 1;
     const description = descriptionHeader ? String(row[descriptionHeader] ?? "").trim() : "";
-    prizes.push({ section, name, winner_count: winnerCount, description });
+    const drawGroup = groupHeader ? String(row[groupHeader] ?? "").trim() : "";
+    prizes.push({ section, name, winner_count: winnerCount, description, draw_group: drawGroup });
   }
   return prizes;
 }
@@ -94,6 +92,7 @@ export function drawRecordsToCsv(records: DrawRecord[]): string {
   const header = [
     "Section",
     "Draw #",
+    "Group",
     "Prize",
     "Mode",
     "Exclude Repeat Winners",
@@ -108,6 +107,7 @@ export function drawRecordsToCsv(records: DrawRecord[]): string {
       [
         csvEscape(r.section ?? ""),
         csvEscape(String(r.section_sequence)),
+        csvEscape(r.draw_group ?? ""),
         csvEscape(r.prize_name ?? ""),
         csvEscape(r.mode),
         csvEscape(r.exclude_repeat_winners === null ? "" : r.exclude_repeat_winners ? "Yes" : "No"),

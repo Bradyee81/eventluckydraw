@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Modal } from "./Modal";
-import type { Prize } from "../types";
+import type { Prize, PrizeInput } from "../types";
 
 export function PrizeFormModal({
   prize,
@@ -8,13 +8,14 @@ export function PrizeFormModal({
   onClose,
 }: {
   prize: Prize;
-  onSave: (patch: { section: string; name: string; winner_count: number; description: string }) => void;
+  onSave: (patch: PrizeInput) => void;
   onClose: () => void;
 }) {
   const [section, setSection] = useState(prize.section);
   const [name, setName] = useState(prize.name);
   const [winnerCount, setWinnerCount] = useState(prize.winner_count);
   const [description, setDescription] = useState(prize.description);
+  const [drawGroup, setDrawGroup] = useState(prize.draw_group);
 
   const save = () => {
     if (!section.trim() || !name.trim()) return;
@@ -23,6 +24,7 @@ export function PrizeFormModal({
       name: name.trim(),
       winner_count: Math.max(1, winnerCount),
       description: description.trim(),
+      draw_group: drawGroup.trim(),
     });
   };
 
@@ -56,6 +58,19 @@ export function PrizeFormModal({
           onChange={(e) => setWinnerCount(Math.max(1, Number(e.target.value) || 1))}
           className="w-24 rounded-md border border-white/15 bg-white/5 px-3 py-2 outline-none focus:border-[#F5C518]"
         />
+      </div>
+      <div className="mb-3">
+        <label className="mb-1 block text-xs text-white/60">Group (optional)</label>
+        <input
+          value={drawGroup}
+          onChange={(e) => setDrawGroup(e.target.value)}
+          placeholder="e.g. Group A"
+          className="w-40 rounded-md border border-white/15 bg-white/5 px-3 py-2 outline-none focus:border-[#F5C518]"
+        />
+        <p className="mt-1 text-xs text-white/40">
+          Prizes in this draw with the same group are drawn together in one round. Leave blank to
+          draw this prize on its own.
+        </p>
       </div>
       <div className="mb-4">
         <label className="mb-1 block text-xs text-white/60">Description (optional)</label>
