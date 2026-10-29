@@ -1,6 +1,6 @@
 [package]
 name = "lucky-draw"
-version = "0.2.23"
+version = "0.2.24"
 description = "Offline lucky draw tool for live events"
 authors = ["Brad"]
 edition = "2021"

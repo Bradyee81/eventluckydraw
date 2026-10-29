@@ -1,9 +1,9 @@
 **What's new**
 
-- **Choose how much each Auto Draw round draws: One prize, One group or Whole draw.** This replaces the "One prize per round" switch, and you can change it between any two rounds. For example, start Grand Lucky Draw one prize at a time, and if time runs short, switch to **One group**: the next round draws the rest of the current group. The choice is remembered for each draw. A draw with groups starts on **One group**. **One group** is only available when the prize list has groups for that draw.
-- **Panic button for a round started by mistake.**
-  - **✕ Cancel round:** after the press that rolls, before the reveal. Stops the round; nothing has been logged, so change the setting and draw again.
-  - **↶ Undo last round:** after the reveal. Removes that round's winners from the results (after a confirmation). Their prizes go back in the list, and those people can be drawn again.
-- **Whole draw** now only draws prizes that still need winners. Before, it included prizes already drawn.
+- **Collection point: the prize desk sees every winner live.** Open **Results** to find the Collection point panel. Each winner shows with their number, name, prize, group and draw, and the prize desk taps **Collected** when they hand a prize over. The tick shows in the new **Collected** column in Results (and in the CSV export). You can also tick it on the laptop. There are two ways to open the page:
+  - **Online (any phone, with PIN):** press **Turn on online page** and set a PIN. Scan the QR code on a phone, on mobile data or any WiFi, and enter the PIN. This laptop needs internet. **Turn off** deletes the online copy.
+  - **On this WiFi (no PIN):** scan the QR code with a phone on the same WiFi as this laptop. No internet needed.
+- **Edit the prize list like a spreadsheet.** Click any cell to change it. **Enter** or **↓** moves down. To fill the cells below, paste a column copied from Excel.
+- **Change many prizes at once.** Tick prizes (shift-click ticks a range) to set or clear their group, move them to another draw, or delete them together.
 
 **New install:** download the file ending in `_x64-setup.exe` below and run it. Already have Lucky Draw 0.2.0 or later? Open it and press **Update now**.
