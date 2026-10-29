@@ -3,6 +3,7 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod admin;
 mod buzzer;
+mod collection;
 mod firmware;
 mod network;
 mod password_hash;
@@ -78,6 +79,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/0011_draw_record_groups.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 12,
+            description: "add collected time to draw records",
+            sql: include_str!("../migrations/0012_draw_record_collected.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -104,6 +111,9 @@ pub fn run() {
             admin::verify_admin_password,
             buzzer::buzzer_contact,
             buzzer::set_reels_spinning,
+            collection::publish_winners,
+            collection::collection_page,
+            collection::qr_svg,
             network::detect_wifi_network,
             network::buzzer_firewall_allowed,
             network::allow_buzzer_firewall,

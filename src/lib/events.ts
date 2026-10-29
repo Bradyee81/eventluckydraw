@@ -39,6 +39,10 @@ export type LuckyDrawEvents = {
   "buzzer:pressed": Record<string, never>;
   // The Output window finished loading and is listening for draw events.
   "output:ready": Record<string, never>;
+  // A "Collected" tap on the collection point page (sent by the Rust server).
+  "winners:collect": { id: number; collected: boolean };
+  // A winner's collected state was saved, so Results can refresh.
+  "winners:changed": Record<string, never>;
 };
 
 export function emitEvent<K extends keyof LuckyDrawEvents>(

@@ -153,6 +153,18 @@ export async function listDrawRecords(): Promise<DrawRecord[]> {
   return db.select<DrawRecord[]>("SELECT * FROM draw_records ORDER BY id DESC");
 }
 
+/**
+ * Marks a winner's prize as handed out at the collection point (at the given
+ * time, default now), or not (null).
+ */
+export async function setDrawRecordCollected(
+  id: number,
+  collectedAt: string | null = new Date().toISOString()
+): Promise<void> {
+  const db = await getDb();
+  await db.execute("UPDATE draw_records SET collected_at = $1 WHERE id = $2", [collectedAt, id]);
+}
+
 /** Removes specific draw records, e.g. a round drawn by mistake. */
 export async function deleteDrawRecords(ids: number[]): Promise<void> {
   const db = await getDb();

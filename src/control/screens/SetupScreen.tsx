@@ -17,7 +17,6 @@ import {
   updatePrize,
 } from "../../lib/db";
 import { ConfirmModal } from "../../components/ConfirmModal";
-import { PrizeFormModal } from "../../components/PrizeFormModal";
 import type { Participant, Prize, PrizeInput } from "../../types";
 
 const dropdownStyle = { backgroundColor: "#10141F", color: "#E6E9EF" };
@@ -314,13 +313,41 @@ export function SetupScreen() {
     refreshPrizes();
   };
 
-  const [editingPrize, setEditingPrize] = useState<Prize | null>(null);
   const [deletingPrize, setDeletingPrize] = useState<Prize | null>(null);
 
-  const saveEditPrize = async (patch: PrizeInput) => {
-    if (!editingPrize) return;
-    await updatePrize(editingPrize.id, patch);
-    setEditingPrize(null);
+  const prizeInput = (p: Prize): PrizeInput => ({
+    section: p.section,
+    name: p.name,
+    winner_count: p.winner_count,
+    description: p.description,
+    draw_group: p.draw_group,
+  });
+
+  // Cleans up a typed cell value. Returns null when it isn't allowed (an empty
+  // section or prize name), so the cell goes back to what it was.
+  const cellValue = (key: SheetKey, raw: string): string | number | null => {
+    const v = raw.trim();
+    if (key === "winner_count") return Math.max(1, Math.floor(Number(v)) || 1);
+    if ((key === "section" || key === "name") && !v) return null;
+    return v;
+  };
+
+  const savePrizeCell = async (p: Prize, key: SheetKey, raw: string) => {
+    const v = cellValue(key, raw);
+    if (v === null || v === p[key]) return;
+    await updatePrize(p.id, { ...prizeInput(p), [key]: v });
+    refreshPrizes();
+  };
+
+  // Pasting several lines (a column copied from Excel) fills this cell and
+  // the ones below it.
+  const pasteDown = async (startRow: number, key: SheetKey, lines: string[]) => {
+    const targets = prizes.slice(startRow, startRow + lines.length);
+    for (const [j, p] of targets.entries()) {
+      const v = cellValue(key, lines[j]);
+      if (v !== null && v !== p[key]) await updatePrize(p.id, { ...prizeInput(p), [key]: v });
+    }
+    setPrizeStatus(`Pasted ${targets.length} value${targets.length === 1 ? "" : "s"}.`);
     refreshPrizes();
   };
 
@@ -328,6 +355,49 @@ export function SetupScreen() {
     if (!deletingPrize) return;
     await deletePrize(deletingPrize.id);
     setDeletingPrize(null);
+    refreshPrizes();
+  };
+
+  // Batch edit: tick prizes (shift-click ticks a range), then set the group or
+  // section of all of them at once.
+  const [selectedPrizeIds, setSelectedPrizeIds] = useState<Set<number>>(new Set());
+  const lastTickedIndex = useRef<number | null>(null);
+  const [batchGroup, setBatchGroup] = useState("");
+  const [batchSection, setBatchSection] = useState("");
+  const [deletingSelected, setDeletingSelected] = useState(false);
+  const selectedPrizes = prizes.filter((p) => selectedPrizeIds.has(p.id));
+
+  const togglePrize = (index: number, shift: boolean) => {
+    const id = prizes[index].id;
+    const tick = !selectedPrizeIds.has(id);
+    const next = new Set(selectedPrizeIds);
+    const last = lastTickedIndex.current;
+    const from = shift && last !== null && last < prizes.length ? last : index;
+    for (let i = Math.min(from, index); i <= Math.max(from, index); i++) {
+      if (tick) next.add(prizes[i].id);
+      else next.delete(prizes[i].id);
+    }
+    lastTickedIndex.current = index;
+    setSelectedPrizeIds(next);
+  };
+
+  const toggleAllPrizes = () => {
+    lastTickedIndex.current = null;
+    setSelectedPrizeIds(
+      selectedPrizeIds.size === prizes.length ? new Set() : new Set(prizes.map((p) => p.id)),
+    );
+  };
+
+  const applyToSelected = async (patch: Partial<PrizeInput>, done: string) => {
+    for (const p of selectedPrizes) await updatePrize(p.id, { ...prizeInput(p), ...patch });
+    setPrizeStatus(`${done} for ${selectedPrizes.length} prize${selectedPrizes.length === 1 ? "" : "s"}.`);
+    refreshPrizes();
+  };
+
+  const confirmDeleteSelected = async () => {
+    for (const p of selectedPrizes) await deletePrize(p.id);
+    setDeletingSelected(false);
+    setSelectedPrizeIds(new Set());
     refreshPrizes();
   };
 
@@ -696,10 +766,92 @@ export function SetupScreen() {
       </div>
 
       {prizes.length > 0 && (
-        <div className="mt-6 max-h-72 overflow-y-auto rounded-md border border-white/10">
+        <p className="mt-6 text-xs text-white/40">
+          Click any cell to edit it, like a spreadsheet. Enter or ↓ moves down, and pasting a
+          column copied from Excel fills the cells below. To change several prizes at once, tick
+          them (shift-click a second box to tick everything in between).
+        </p>
+      )}
+
+      {selectedPrizes.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-end gap-3 rounded-md border border-[#F5C518]/40 bg-[#F5C518]/5 p-3 text-sm">
+          <span className="self-center font-semibold text-[#F5C518]">
+            {selectedPrizes.length} selected
+          </span>
+          <div className="flex items-end gap-1">
+            <div>
+              <label className="mb-1 block text-xs text-white/60">Group</label>
+              <input
+                value={batchGroup}
+                onChange={(e) => setBatchGroup(e.target.value)}
+                placeholder="e.g. Group A"
+                className="w-32 rounded-md border border-white/15 bg-white/5 px-3 py-1.5 outline-none focus:border-[#F5C518]"
+              />
+            </div>
+            <button
+              onClick={() =>
+                applyToSelected(
+                  { draw_group: batchGroup.trim() },
+                  batchGroup.trim() ? `Group set to "${batchGroup.trim()}"` : "Group cleared",
+                )
+              }
+              className="rounded-md bg-[#F5C518] px-3 py-1.5 font-semibold text-[#10141F]"
+            >
+              {batchGroup.trim() ? "Set group" : "Clear group"}
+            </button>
+          </div>
+          <div className="flex items-end gap-1">
+            <div>
+              <label className="mb-1 block text-xs text-white/60">Section</label>
+              <input
+                value={batchSection}
+                onChange={(e) => setBatchSection(e.target.value)}
+                placeholder="e.g. Grand Lucky Draw"
+                className="w-44 rounded-md border border-white/15 bg-white/5 px-3 py-1.5 outline-none focus:border-[#F5C518]"
+              />
+            </div>
+            <button
+              onClick={() =>
+                applyToSelected(
+                  { section: batchSection.trim() },
+                  `Moved to "${batchSection.trim()}"`,
+                )
+              }
+              disabled={!batchSection.trim()}
+              className="rounded-md bg-[#F5C518] px-3 py-1.5 font-semibold text-[#10141F] disabled:opacity-40"
+            >
+              Move
+            </button>
+          </div>
+          <button
+            onClick={() => setDeletingSelected(true)}
+            className="rounded-md border border-[#E27676]/50 px-3 py-1.5 text-[#E27676] hover:bg-[#E27676]/10"
+          >
+            Delete selected
+          </button>
+          <button
+            onClick={() => setSelectedPrizeIds(new Set())}
+            className="rounded-md border border-white/15 px-3 py-1.5 text-white/70 hover:bg-white/5"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
+      {prizes.length > 0 && (
+        <div className="mt-2 max-h-96 overflow-y-auto rounded-md border border-white/10">
           <table className="w-full text-left text-xs">
             <thead className="sticky top-0 bg-[#0E1320] text-white/50">
               <tr>
+                <th className="w-8 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedPrizes.length === prizes.length}
+                    onChange={toggleAllPrizes}
+                    title="Select all"
+                    className="accent-[#F5C518]"
+                  />
+                </th>
                 <th className="px-3 py-2">Section</th>
                 <th className="px-3 py-2">Prize</th>
                 <th className="px-3 py-2">Winners</th>
@@ -709,20 +861,34 @@ export function SetupScreen() {
               </tr>
             </thead>
             <tbody>
-              {prizes.map((p) => (
-                <tr key={p.id} className="border-t border-white/5">
-                  <td className="px-3 py-1.5">{p.section}</td>
-                  <td className="px-3 py-1.5 font-semibold text-[#F5C518]">{p.name}</td>
-                  <td className="px-3 py-1.5">{p.winner_count}</td>
-                  <td className="px-3 py-1.5 text-white/60">{p.draw_group}</td>
-                  <td className="px-3 py-1.5 text-white/60">{p.description}</td>
+              {prizes.map((p, i) => (
+                <tr
+                  key={p.id}
+                  className={`border-t border-white/5 ${selectedPrizeIds.has(p.id) ? "bg-[#F5C518]/10" : ""}`}
+                >
+                  <td className="px-3 py-1.5">
+                    <input
+                      type="checkbox"
+                      checked={selectedPrizeIds.has(p.id)}
+                      onChange={() => {}}
+                      onClick={(e) => togglePrize(i, e.shiftKey)}
+                      className="accent-[#F5C518]"
+                    />
+                  </td>
+                  {SHEET_COLUMNS.map((col, c) => (
+                    <td key={col.key} className="p-0">
+                      <SheetCell
+                        row={i}
+                        col={c}
+                        value={String(p[col.key])}
+                        numeric={col.key === "winner_count"}
+                        className={col.className}
+                        onCommit={(v) => savePrizeCell(p, col.key, v)}
+                        onPasteLines={(lines) => pasteDown(i, col.key, lines)}
+                      />
+                    </td>
+                  ))}
                   <td className="whitespace-nowrap px-3 py-1.5 text-right">
-                    <button
-                      onClick={() => setEditingPrize(p)}
-                      className="mr-2 text-[#F5C518] hover:underline"
-                    >
-                      Edit
-                    </button>
                     <button
                       onClick={() => setDeletingPrize(p)}
                       className="text-[#E27676] hover:underline"
@@ -735,14 +901,6 @@ export function SetupScreen() {
             </tbody>
           </table>
         </div>
-      )}
-
-      {editingPrize && (
-        <PrizeFormModal
-          prize={editingPrize}
-          onSave={saveEditPrize}
-          onClose={() => setEditingPrize(null)}
-        />
       )}
 
       {deletingDraw && (
@@ -764,6 +922,83 @@ export function SetupScreen() {
           onCancel={() => setDeletingPrize(null)}
         />
       )}
+
+      {deletingSelected && (
+        <ConfirmModal
+          title={`Delete ${selectedPrizes.length} prize${selectedPrizes.length === 1 ? "" : "s"}?`}
+          message="The selected prizes will be removed from the catalog. Past draw records aren't affected."
+          confirmLabel="Delete"
+          onConfirm={confirmDeleteSelected}
+          onCancel={() => setDeletingSelected(false)}
+        />
+      )}
     </div>
+  );
+}
+
+type SheetKey = "section" | "name" | "winner_count" | "draw_group" | "description";
+
+const SHEET_COLUMNS: { key: SheetKey; className: string }[] = [
+  { key: "section", className: "w-40" },
+  { key: "name", className: "font-semibold text-[#F5C518]" },
+  { key: "winner_count", className: "w-16" },
+  { key: "draw_group", className: "w-24 text-white/70" },
+  { key: "description", className: "text-white/70" },
+];
+
+// One spreadsheet-style cell in the prize table: click and type, saved when you
+// leave the cell. Enter / ↓ / ↑ move between rows, Esc undoes the typing.
+function SheetCell({
+  row,
+  col,
+  value,
+  numeric,
+  className,
+  onCommit,
+  onPasteLines,
+}: {
+  row: number;
+  col: number;
+  value: string;
+  numeric: boolean;
+  className: string;
+  onCommit: (value: string) => void;
+  onPasteLines: (lines: string[]) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+
+  const focusCell = (r: number) =>
+    document.querySelector<HTMLInputElement>(`[data-sheet-cell="${r}-${col}"]`)?.focus();
+
+  return (
+    <input
+      data-sheet-cell={`${row}-${col}`}
+      value={draft}
+      inputMode={numeric ? "numeric" : undefined}
+      onChange={(e) => setDraft(e.target.value)}
+      onFocus={(e) => e.target.select()}
+      onBlur={() => {
+        if (draft !== value) onCommit(draft);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === "ArrowDown") {
+          e.preventDefault();
+          focusCell(e.shiftKey && e.key === "Enter" ? row - 1 : row + 1);
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          focusCell(row - 1);
+        } else if (e.key === "Escape") {
+          setDraft(value);
+        }
+      }}
+      onPaste={(e) => {
+        const lines = e.clipboardData.getData("text").replace(/\r/g, "").replace(/\n$/, "").split("\n");
+        if (lines.length < 2) return;
+        e.preventDefault();
+        onPasteLines(lines.map((l) => l.split("\t")[0]));
+      }}
+      className={`w-full min-w-0 border border-transparent bg-transparent px-3 py-1.5 outline-none hover:border-white/10 focus:border-[#F5C518] focus:bg-white/5 ${className}`}
+    />
   );
 }

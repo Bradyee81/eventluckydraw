@@ -100,6 +100,7 @@ export function drawRecordsToCsv(records: DrawRecord[]): string {
     "Participant Name",
     "Timestamp",
     "Operator Note",
+    "Collected",
   ];
   const lines = [header.join(",")];
   for (const r of records) {
@@ -115,6 +116,7 @@ export function drawRecordsToCsv(records: DrawRecord[]): string {
         csvEscape(r.participant_name ?? ""),
         csvEscape(r.created_at),
         csvEscape(r.operator_note ?? ""),
+        csvEscape(r.collected_at ?? ""),
       ].join(",")
     );
   }

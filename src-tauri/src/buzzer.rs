@@ -172,7 +172,11 @@ fn spawn_request_loop(
     last_seen: Arc<Mutex<Option<Instant>>>,
 ) {
     std::thread::spawn(move || {
-        for mut request in server.incoming_requests() {
+        for request in server.incoming_requests() {
+            // Phones on the collection point page share this server.
+            let Some(mut request) = crate::collection::handle(&app_handle, request) else {
+                continue;
+            };
             let mut body = String::new();
             let _ = request.as_reader().read_to_string(&mut body);
 

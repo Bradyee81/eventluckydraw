@@ -7,6 +7,7 @@ import { ResultsScreen } from "./screens/ResultsScreen";
 import { UpdateBanner, UpdateStatusFooter } from "../components/UpdateBanner";
 import { PresentControl } from "../components/PresentControl";
 import { useAppUpdater } from "../lib/updater";
+import { useCollectionPointPublisher } from "../lib/collectionPoint";
 
 type Screen = "setup" | "draw" | "auto-draw" | "results";
 
@@ -22,6 +23,7 @@ function Shell() {
   const [navCollapsed, setNavCollapsed] = useState(false);
   const { loading } = useAppData();
   const updater = useAppUpdater();
+  useCollectionPointPublisher();
 
   if (loading) {
     return (

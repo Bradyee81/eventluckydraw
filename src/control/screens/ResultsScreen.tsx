@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { clearDrawRecords, listDrawRecords } from "../../lib/db";
+import { markCollected } from "../../lib/collectionPoint";
+import { CollectionPointPanel } from "../../components/CollectionPointPanel";
+import { onEvent } from "../../lib/events";
 import { drawRecordsToCsv } from "../../lib/csv";
 import { formatSectionLabel } from "../../lib/format";
 import { Modal } from "../../components/Modal";
@@ -16,7 +19,18 @@ export function ResultsScreen() {
 
   useEffect(() => {
     refresh();
+    // Collected taps from the collection point page.
+    const unlisten = onEvent("winners:changed", refresh);
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   }, []);
+
+  const toggleCollected = async (r: DrawRecord) => {
+    await markCollected(r, r.collected_at === null);
+    refresh();
+  };
+  const collectedCount = records.filter((r) => r.collected_at !== null).length;
 
   const handleExport = async () => {
     setExportMsg(null);
@@ -38,7 +52,7 @@ export function ResultsScreen() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl p-8">
+    <div className="mx-auto max-w-4xl p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Results</h1>
@@ -70,6 +84,8 @@ export function ResultsScreen() {
 
       {exportMsg && <p className="mb-4 text-sm text-[#7CD992]">{exportMsg}</p>}
 
+      <CollectionPointPanel collected={collectedCount} total={records.length} />
+
       <div className="overflow-hidden rounded-md border border-white/10">
         <table className="w-full text-left text-sm">
           <thead className="bg-[#0E1320] text-white/50">
@@ -81,6 +97,7 @@ export function ResultsScreen() {
               <th className="px-3 py-2">Name</th>
               <th className="px-3 py-2">Timestamp</th>
               <th className="px-3 py-2">Note</th>
+              <th className="px-3 py-2">Collected</th>
             </tr>
           </thead>
           <tbody>
@@ -111,11 +128,24 @@ export function ResultsScreen() {
                   {new Date(r.created_at).toLocaleString()}
                 </td>
                 <td className="px-3 py-2 text-white/60">{r.operator_note ?? ""}</td>
+                <td className="whitespace-nowrap px-3 py-2">
+                  <button
+                    onClick={() => toggleCollected(r)}
+                    title={r.collected_at ? new Date(r.collected_at).toLocaleString() : "Mark as collected"}
+                    className={
+                      r.collected_at
+                        ? "rounded border border-[#7CD992]/40 px-2 py-0.5 text-xs text-[#7CD992]"
+                        : "rounded border border-white/15 px-2 py-0.5 text-xs text-white/40 hover:bg-white/5"
+                    }
+                  >
+                    {r.collected_at ? "✓ Collected" : "Not yet"}
+                  </button>
+                </td>
               </tr>
             ))}
             {records.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-white/40">
+                <td colSpan={8} className="px-3 py-6 text-center text-white/40">
                   No draws logged yet.
                 </td>
               </tr>

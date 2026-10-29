@@ -38,6 +38,8 @@ export interface DrawRecord {
   prize_name: string;
   // Snapshot of that prize's group, e.g. "Group A" ('' = none).
   draw_group: string;
+  // When the prize was handed out at the collection point (NULL = not yet).
+  collected_at: string | null;
   created_at: string;
 }
 
